@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod render;
 pub mod runtime;
+pub mod tmux;
 
 use anyhow::{bail, Result};
 use orbit_core::{context::OrbitScope, engine::Engine, session::Session};
@@ -41,7 +42,9 @@ pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine, opts: L
 
     // 4. Decide tmux strategy before registering the session
     let tmux_name = tmux_session_name(scope, engine);
-    let use_tmux = !opts.no_tmux && tmux_available() && !already_in_tmux();
+    let use_tmux = !opts.no_tmux
+        && !tmux::already_inside()
+        && tmux::ensure_available(); // prompts to install if missing + TTY
 
     // 5. Register session — BEFORE set_env() overwrites XDG_DATA_HOME
     let session = Session::new(
@@ -90,37 +93,8 @@ pub fn tmux_session_name(scope: &OrbitScope, engine: Engine) -> String {
     format!("orbit-{}", parts.join("-"))
 }
 
-/// `true` if the `tmux` binary is on PATH.
-pub fn tmux_available() -> bool {
-    Command::new("which")
-        .arg("tmux")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-/// `true` if we're already running inside a tmux session.
-pub fn already_in_tmux() -> bool {
-    std::env::var("TMUX").is_ok()
-}
-
-/// `true` if a tmux session with the given name already exists.
-pub fn tmux_session_exists(name: &str) -> bool {
-    Command::new("tmux")
-        .args(["has-session", "-t", name])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-/// exec into tmux, either creating a new session or reattaching to an existing one.
-/// All env vars set by set_env() are inherited by tmux → engine.
 fn exec_with_tmux(engine: Engine, config_file: &Path, session_name: &str) -> Result<()> {
-    if tmux_session_exists(session_name) {
+    if tmux::session_exists(session_name) {
         // Session already exists — reattach
         tracing::debug!("reattaching to tmux session {session_name}");
         let err = Command::new("tmux")
