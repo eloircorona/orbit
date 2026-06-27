@@ -43,9 +43,6 @@ pub async fn run(cli: Cli) -> Result<()> {
         Some(Commands::Launch(args)) => commands::launch::run(args).await,
         Some(Commands::Session(args)) => commands::session::run(args).await,
         Some(Commands::Daemon(args)) => commands::daemon::run(args).await,
-        None => {
-            println!("TUI not yet implemented. Use `orbit launch` to start a session.");
-            Ok(())
-        }
+        None => orbit_tui::run().await,
     }
 }

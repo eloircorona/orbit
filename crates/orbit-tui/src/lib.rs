@@ -1,2 +1,4 @@
-pub mod app;
-pub mod views;
+mod app;
+mod views;
+
+pub use app::run;

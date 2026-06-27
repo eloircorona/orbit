@@ -1,0 +1,170 @@
+use anyhow::Result;
+use orbit_core::{
+    ipc::{pid_path, socket_path, Request, Response},
+    session::Session,
+};
+use std::{
+    fs,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::{UnixListener, UnixStream},
+    sync::broadcast,
+};
+use tracing::{debug, info, warn};
+
+// ── state ─────────────────────────────────────────────────────────────────────
+
+struct ServerState {
+    started_at: Instant,
+    shutdown_tx: broadcast::Sender<()>,
+}
+
+impl ServerState {
+    fn new(shutdown_tx: broadcast::Sender<()>) -> Arc<Self> {
+        Arc::new(Self {
+            started_at: Instant::now(),
+            shutdown_tx,
+        })
+    }
+
+    async fn handle(&self, req: Request) -> Response {
+        match req {
+            Request::ListSessions => {
+                let sessions = Session::load_all();
+                Response::Sessions { sessions }
+            }
+
+            Request::KillSession { id } => {
+                let sessions = Session::load_all();
+                match sessions.into_iter().find(|s| s.id == id) {
+                    None => Response::Error {
+                        message: format!("Session {id} not found"),
+                    },
+                    Some(session) => {
+                        send_sigterm(session.pid);
+                        let _ = session.delete();
+                        Response::Killed { id }
+                    }
+                }
+            }
+
+            Request::CleanSessions => {
+                let sessions = Session::load_all();
+                let mut count = 0usize;
+                for s in &sessions {
+                    if !s.is_running() {
+                        let _ = s.delete();
+                        count += 1;
+                    }
+                }
+                Response::Cleaned { count }
+            }
+
+            Request::Status => {
+                let sessions = Session::load_all();
+                let alive = sessions.iter().filter(|s| s.is_running()).count();
+                Response::Status {
+                    uptime_secs: self.started_at.elapsed().as_secs(),
+                    session_count: alive,
+                    pid: std::process::id(),
+                }
+            }
+
+            Request::Shutdown => {
+                let _ = self.shutdown_tx.send(());
+                Response::Ok
+            }
+        }
+    }
+}
+
+// ── connection handler ────────────────────────────────────────────────────────
+
+async fn handle_connection(stream: UnixStream, state: Arc<ServerState>) {
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        debug!("ipc request: {line}");
+        let response = match serde_json::from_str::<Request>(&line) {
+            Ok(req) => state.handle(req).await,
+            Err(e) => Response::Error {
+                message: format!("parse error: {e}"),
+            },
+        };
+
+        let mut json = serde_json::to_string(&response).unwrap_or_default();
+        json.push('\n');
+        if writer.write_all(json.as_bytes()).await.is_err() {
+            break;
+        }
+    }
+}
+
+// ── server entry point ────────────────────────────────────────────────────────
+
+pub async fn run() -> Result<()> {
+    let sock = socket_path();
+    let pid_file = pid_path();
+
+    fs::create_dir_all(sock.parent().unwrap())?;
+
+    // Remove stale socket file
+    if sock.exists() {
+        fs::remove_file(&sock)?;
+    }
+
+    // Write PID file
+    fs::write(&pid_file, std::process::id().to_string())?;
+
+    let listener = UnixListener::bind(&sock)?;
+    info!("orbitd listening on {}", sock.display());
+
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
+    let state = ServerState::new(shutdown_tx.clone());
+
+    // Background: auto-clean dead sessions every 60s
+    tokio::spawn(crate::session_monitor::run_cleanup_loop(
+        Duration::from_secs(60),
+        shutdown_tx.subscribe(),
+    ));
+
+    let mut shutdown_rx = shutdown_tx.subscribe();
+
+    loop {
+        tokio::select! {
+            accept = listener.accept() => {
+                match accept {
+                    Ok((stream, _)) => {
+                        let state = state.clone();
+                        tokio::spawn(handle_connection(stream, state));
+                    }
+                    Err(e) => warn!("accept error: {e}"),
+                }
+            }
+            _ = shutdown_rx.recv() => {
+                info!("shutdown requested — stopping orbitd");
+                break;
+            }
+        }
+    }
+
+    // Cleanup
+    let _ = fs::remove_file(&sock);
+    let _ = fs::remove_file(&pid_file);
+
+    Ok(())
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+fn send_sigterm(pid: u32) {
+    let _ = std::process::Command::new("kill")
+        .arg(pid.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
