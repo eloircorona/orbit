@@ -40,7 +40,7 @@ pub enum Mode {
     Help,
     ConfirmKill(Session),
     SessionDetails(Session),
-    AddMcp(AddMcpState),
+    AddMcp(Box<AddMcpState>),
     ConfirmRemoveMcp(crate::mcp::McpEntry),
 }
 
@@ -141,6 +141,53 @@ impl LaunchState {
     }
 }
 
+// ── mcp scope ─────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum McpScope {
+    Global,
+    Tenant,
+    Project,
+    Repo,
+}
+
+impl McpScope {
+    pub fn cycle_right(self) -> Self {
+        match self {
+            McpScope::Global => McpScope::Tenant,
+            McpScope::Tenant => McpScope::Project,
+            McpScope::Project => McpScope::Repo,
+            McpScope::Repo => McpScope::Global,
+        }
+    }
+
+    pub fn cycle_left(self) -> Self {
+        match self {
+            McpScope::Global => McpScope::Repo,
+            McpScope::Tenant => McpScope::Global,
+            McpScope::Project => McpScope::Tenant,
+            McpScope::Repo => McpScope::Project,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            McpScope::Global => "global",
+            McpScope::Tenant => "tenant",
+            McpScope::Project => "project",
+            McpScope::Repo => "repo",
+        }
+    }
+
+    pub fn needs_project(self) -> bool {
+        matches!(self, McpScope::Project | McpScope::Repo)
+    }
+
+    pub fn needs_repo(self) -> bool {
+        self == McpScope::Repo
+    }
+}
+
 // ── add-mcp state ─────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -150,6 +197,8 @@ pub enum AddMcpField {
     Args,
     Env,
     Scope,
+    ProjectName,
+    RepoName,
     Confirm,
 }
 
@@ -160,7 +209,9 @@ impl AddMcpField {
             AddMcpField::Command => AddMcpField::Args,
             AddMcpField::Args => AddMcpField::Env,
             AddMcpField::Env => AddMcpField::Scope,
-            AddMcpField::Scope => AddMcpField::Confirm,
+            AddMcpField::Scope => AddMcpField::ProjectName,
+            AddMcpField::ProjectName => AddMcpField::RepoName,
+            AddMcpField::RepoName => AddMcpField::Confirm,
             AddMcpField::Confirm => AddMcpField::Name,
         }
     }
@@ -172,7 +223,9 @@ impl AddMcpField {
             AddMcpField::Args => AddMcpField::Command,
             AddMcpField::Env => AddMcpField::Args,
             AddMcpField::Scope => AddMcpField::Env,
-            AddMcpField::Confirm => AddMcpField::Scope,
+            AddMcpField::ProjectName => AddMcpField::Scope,
+            AddMcpField::RepoName => AddMcpField::ProjectName,
+            AddMcpField::Confirm => AddMcpField::RepoName,
         }
     }
 }
@@ -182,7 +235,9 @@ pub struct AddMcpState {
     pub command: TextInput,
     pub args: TextInput,
     pub env: TextInput,
-    pub scope_global: bool,
+    pub scope: McpScope,
+    pub project_name: TextInput,
+    pub repo_name: TextInput,
     pub focused: AddMcpField,
 }
 
@@ -193,7 +248,9 @@ impl AddMcpState {
             command: TextInput::new("Command", "npx"),
             args: TextInput::new("Args", "-y @scope/mcp-package"),
             env: TextInput::new("Env", "KEY=VALUE"),
-            scope_global: true,
+            scope: McpScope::Global,
+            project_name: TextInput::new("Project", "my-project"),
+            repo_name: TextInput::new("Repo", "my-repo"),
             focused: AddMcpField::Name,
         }
     }
@@ -204,18 +261,35 @@ impl AddMcpState {
             AddMcpField::Command => Some(&mut self.command),
             AddMcpField::Args => Some(&mut self.args),
             AddMcpField::Env => Some(&mut self.env),
+            AddMcpField::ProjectName => Some(&mut self.project_name),
+            AddMcpField::RepoName => Some(&mut self.repo_name),
             _ => None,
         }
     }
 
     pub fn target_path(&self, ai_root: &Path, default_tenant: &str) -> PathBuf {
-        if self.scope_global || default_tenant.is_empty() {
-            ai_root.join("mcp.json")
+        let tenant = if default_tenant.is_empty() {
+            "default"
         } else {
-            ai_root
+            default_tenant
+        };
+        match self.scope {
+            McpScope::Global => ai_root.join("mcp.json"),
+            McpScope::Tenant => ai_root.join("tenants").join(tenant).join("mcp.json"),
+            McpScope::Project => ai_root
                 .join("tenants")
-                .join(default_tenant)
-                .join("mcp.json")
+                .join(tenant)
+                .join("projects")
+                .join(self.project_name.as_str())
+                .join("mcp.json"),
+            McpScope::Repo => ai_root
+                .join("tenants")
+                .join(tenant)
+                .join("projects")
+                .join(self.project_name.as_str())
+                .join("repositories")
+                .join(self.repo_name.as_str())
+                .join("mcp.json"),
         }
     }
 
@@ -571,15 +645,16 @@ impl App {
                         match code {
                             KeyCode::Up => state.focused = state.focused.prev(),
                             KeyCode::Down | KeyCode::Enter => state.focused = state.focused.next(),
-                            KeyCode::Left | KeyCode::Right
-                                if state.focused == AddMcpField::Scope =>
-                            {
-                                state.scope_global = !state.scope_global;
+                            KeyCode::Right if state.focused == AddMcpField::Scope => {
+                                state.scope = state.scope.cycle_right();
+                            }
+                            KeyCode::Left if state.focused == AddMcpField::Scope => {
+                                state.scope = state.scope.cycle_left();
                             }
                             _ => {}
                         }
                     }
-                    self.mode = Mode::AddMcp(state);
+                    self.mode = Mode::AddMcp(state);  // state is Box<AddMcpState>
                 }
             },
             Mode::ConfirmRemoveMcp(entry) => {
@@ -671,7 +746,7 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.mcp_move_up(),
             KeyCode::Down | KeyCode::Char('j') => self.mcp_move_down(),
             KeyCode::Char('a') => {
-                self.mode = Mode::AddMcp(AddMcpState::new());
+                self.mode = Mode::AddMcp(Box::new(AddMcpState::new()));
             }
             KeyCode::Char('x') | KeyCode::Delete => {
                 if let Some(entry) = self.selected_mcp().cloned() {
@@ -745,7 +820,28 @@ async fn run_app<B: ratatui::backend::Backend>(
         }
 
         if last_refresh.elapsed() > Duration::from_secs(2) {
-            app.refresh_sessions();
+            if app.sys.daemon_running {
+                match tokio::time::timeout(
+                    Duration::from_millis(500),
+                    orbit_client::ipc::list_sessions(),
+                )
+                .await
+                {
+                    Ok(Ok(sessions)) => {
+                        let selected = app.table_state.selected();
+                        app.sessions = sessions;
+                        if app.sessions.is_empty() {
+                            app.table_state.select(None);
+                        } else {
+                            let i = selected.unwrap_or(0).min(app.sessions.len() - 1);
+                            app.table_state.select(Some(i));
+                        }
+                    }
+                    _ => app.refresh_sessions(),
+                }
+            } else {
+                app.refresh_sessions();
+            }
             last_refresh = Instant::now();
         }
 

@@ -1,4 +1,4 @@
-use crate::app::{AddMcpField, AddMcpState};
+use crate::app::{AddMcpField, AddMcpState, McpScope};
 use crate::mcp::McpEntry;
 use crate::widget::TextInput;
 use orbit_core::session::Session;
@@ -205,14 +205,11 @@ pub fn render_details(f: &mut Frame, area: Rect, session: Session) {
 
 // ── add mcp popup ─────────────────────────────────────────────────────────────
 
-pub fn render_add_mcp(f: &mut Frame, area: Rect, state: &AddMcpState, default_tenant: &str) {
-    let popup_area = centered_rect(64, 16, area);
+pub fn render_add_mcp(f: &mut Frame, area: Rect, state: &AddMcpState, _default_tenant: &str) {
+    let popup_area = centered_rect(64, 19, area);
 
-    let tenant_label = if default_tenant.is_empty() {
-        "tenant"
-    } else {
-        default_tenant
-    };
+    let project_active = state.scope.needs_project();
+    let repo_active = state.scope.needs_repo();
 
     let lines = vec![
         Line::from(""),
@@ -232,10 +229,19 @@ pub fn render_add_mcp(f: &mut Frame, area: Rect, state: &AddMcpState, default_te
             ),
         ]),
         Line::from(""),
-        mcp_scope_line(
-            state.focused == AddMcpField::Scope,
-            state.scope_global,
-            tenant_label,
+        mcp_scope_line(state.focused == AddMcpField::Scope, state.scope),
+        Line::from(""),
+        mcp_input_line_opt(
+            "Project:",
+            &state.project_name,
+            state.focused == AddMcpField::ProjectName,
+            project_active,
+        ),
+        mcp_input_line_opt(
+            "Repo:",
+            &state.repo_name,
+            state.focused == AddMcpField::RepoName,
+            repo_active,
         ),
         Line::from(""),
         mcp_confirm_line(state.focused == AddMcpField::Confirm),
@@ -273,7 +279,7 @@ fn mcp_input_line(label: &str, input: &TextInput, focused: bool) -> Line<'static
     ])
 }
 
-fn mcp_scope_line(focused: bool, scope_global: bool, tenant: &str) -> Line<'static> {
+fn mcp_scope_line(focused: bool, scope: McpScope) -> Line<'static> {
     let label_style = if focused {
         Style::default()
             .fg(Color::Cyan)
@@ -281,29 +287,65 @@ fn mcp_scope_line(focused: bool, scope_global: bool, tenant: &str) -> Line<'stat
     } else {
         Style::default().fg(Color::DarkGray)
     };
-    let g_style = if scope_global {
+    let scopes = [
+        McpScope::Global,
+        McpScope::Tenant,
+        McpScope::Project,
+        McpScope::Repo,
+    ];
+    let mut spans = vec![Span::styled("  Scope:   ".to_string(), label_style)];
+    for (i, s) in scopes.iter().enumerate() {
+        let active = *s == scope;
+        let text = if active {
+            format!("● {}", s.label())
+        } else {
+            format!("○ {}", s.label())
+        };
+        let style = if active {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        spans.push(Span::styled(text, style));
+        if i < scopes.len() - 1 {
+            spans.push(Span::styled("  ".to_string(), Style::default()));
+        }
+    }
+    spans.push(Span::styled(
+        "  [←→]".to_string(),
+        Style::default().fg(Color::DarkGray),
+    ));
+    Line::from(spans)
+}
+
+fn mcp_input_line_opt(
+    label: &str,
+    input: &TextInput,
+    focused: bool,
+    active: bool,
+) -> Line<'static> {
+    let dim = Style::default().fg(Color::DarkGray);
+    let label_style = if focused && active {
         Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::DarkGray)
+        dim
     };
-    let t_style = if !scope_global {
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
+    let val_style = if active { Style::default() } else { dim };
+    let text = if active {
+        input.display(focused)
     } else {
-        Style::default().fg(Color::DarkGray)
+        "  (not used for this scope)".to_string()
     };
+    let padded = pad42(&text);
     Line::from(vec![
-        Span::styled("  Scope:   ".to_string(), label_style),
-        Span::styled("● global".to_string(), g_style),
-        Span::styled(
-            "   ○ tenant (".to_string(),
-            Style::default().fg(Color::DarkGray),
-        ),
-        Span::styled(tenant.to_string(), t_style),
-        Span::styled(")  [←→]".to_string(), Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("  {:<10}", label), label_style),
+        Span::styled("[".to_string(), dim),
+        Span::styled(padded, val_style),
+        Span::styled("]".to_string(), dim),
     ])
 }
 

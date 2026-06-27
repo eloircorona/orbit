@@ -12,15 +12,59 @@ pub struct McpEntry {
     pub source_file: PathBuf,
 }
 
-pub fn load_entries(ai_root: &Path, default_tenant: &str) -> Vec<McpEntry> {
+pub fn load_entries(ai_root: &Path, _default_tenant: &str) -> Vec<McpEntry> {
     let mut entries = Vec::new();
     collect_from_file(ai_root.join("mcp.json"), "global", &mut entries);
-    if !default_tenant.is_empty() {
-        let path = ai_root
-            .join("tenants")
-            .join(default_tenant)
-            .join("mcp.json");
-        collect_from_file(path, &format!("tenant/{default_tenant}"), &mut entries);
+
+    let tenants_dir = ai_root.join("tenants");
+    let Ok(tenant_iter) = std::fs::read_dir(&tenants_dir) else {
+        return entries;
+    };
+    for t in tenant_iter.flatten() {
+        let tenant_path = t.path();
+        if !tenant_path.is_dir() {
+            continue;
+        }
+        let tenant_name = t.file_name().to_string_lossy().to_string();
+        collect_from_file(
+            tenant_path.join("mcp.json"),
+            &format!("tenant/{tenant_name}"),
+            &mut entries,
+        );
+
+        let projects_dir = tenant_path.join("projects");
+        let Ok(project_iter) = std::fs::read_dir(&projects_dir) else {
+            continue;
+        };
+        for p in project_iter.flatten() {
+            let project_path = p.path();
+            if !project_path.is_dir() {
+                continue;
+            }
+            let project_name = p.file_name().to_string_lossy().to_string();
+            collect_from_file(
+                project_path.join("mcp.json"),
+                &format!("project/{tenant_name}/{project_name}"),
+                &mut entries,
+            );
+
+            let repos_dir = project_path.join("repositories");
+            let Ok(repo_iter) = std::fs::read_dir(&repos_dir) else {
+                continue;
+            };
+            for r in repo_iter.flatten() {
+                let repo_path = r.path();
+                if !repo_path.is_dir() {
+                    continue;
+                }
+                let repo_name = r.file_name().to_string_lossy().to_string();
+                collect_from_file(
+                    repo_path.join("mcp.json"),
+                    &format!("repo/{tenant_name}/{project_name}/{repo_name}"),
+                    &mut entries,
+                );
+            }
+        }
     }
     entries
 }
