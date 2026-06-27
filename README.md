@@ -190,5 +190,3 @@ Socket: `~/.local/share/orbit/orbit.sock`
 ## License
 
 MIT — Copyright (c) 2026 Eloir Corona
-
-Developed independently outside of work hours on personal equipment.
