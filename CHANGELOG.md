@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `orbit dev enable|disable|status|generate-token` — dev-mode toggle via token-based auth
 - MCP configuration at four scope levels: global, tenant, project, repository
 - CI workflow: format check, clippy `-D warnings`, tests on every push/PR to `main`
-- Release workflow: cross-compiled static binaries for linux-x86_64, linux-aarch64, macos-x86_64, macos-aarch64 + SHA-256 checksums
+- Release workflow: cross-compiled static binaries for linux-x86_64 and linux-aarch64 + SHA-256 checksums
 - MIT license — Copyright (c) 2026 Eloir Corona
 
 [Unreleased]: https://github.com/tensiply/orbit/compare/v0.1.0...HEAD
