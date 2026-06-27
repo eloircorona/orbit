@@ -1,0 +1,13 @@
+[package]
+name = "orbit-core"
+description = "Shared types, config, context, and errors for orbit"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+directories.workspace = true

@@ -1,0 +1,18 @@
+[package]
+name = "orbit-engine"
+description = "Engine launcher: resolves scope and generates config for opencode/gemini/claude"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orbit-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true }
+directories.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,14 @@
+[package]
+name = "orbit-client"
+description = "IPC client: connects to orbitd via Unix socket"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orbit-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true }

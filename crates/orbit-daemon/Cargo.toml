@@ -1,0 +1,15 @@
+[package]
+name = "orbit-daemon"
+description = "Persistent daemon: context cache, session manager, IPC server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orbit-core.workspace = true
+orbit-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true }

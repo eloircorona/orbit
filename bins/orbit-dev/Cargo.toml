@@ -1,0 +1,24 @@
+[package]
+name = "orbit-dev"
+description = "AI ecosystem CLI — development build with experimental features and dev utilities"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "orbit-dev"
+path = "src/main.rs"
+
+[dependencies]
+orbit-core.workspace = true
+orbit-cli.workspace = true
+orbit-client.workspace = true
+orbit-engine.workspace = true
+orbit-daemon.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true }
+serde_json.workspace = true

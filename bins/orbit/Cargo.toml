@@ -1,0 +1,21 @@
+[package]
+name = "orbit"
+description = "AI ecosystem CLI — stable release"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "orbit"
+path = "src/main.rs"
+
+[dependencies]
+orbit-core.workspace = true
+orbit-cli.workspace = true
+orbit-client.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true }

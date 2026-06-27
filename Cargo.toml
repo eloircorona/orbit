@@ -1,0 +1,52 @@
+[workspace]
+members = [
+    "bins/orbit",
+    "bins/orbit-dev",
+    "crates/orbit-core",
+    "crates/orbit-cli",
+    "crates/orbit-tui",
+    "crates/orbit-daemon",
+    "crates/orbit-client",
+    "crates/orbit-engine",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Eloir Corona <ecorona@better.com.mx>"]
+license = "MIT"
+
+[workspace.dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+directories = "6"
+
+# Internal crates
+orbit-core = { path = "crates/orbit-core" }
+orbit-cli = { path = "crates/orbit-cli" }
+orbit-tui = { path = "crates/orbit-tui" }
+orbit-daemon = { path = "crates/orbit-daemon" }
+orbit-client = { path = "crates/orbit-client" }
+orbit-engine = { path = "crates/orbit-engine" }
