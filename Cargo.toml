@@ -44,6 +44,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Utilities
 directories = "6"
 tempfile = "3"
+sha2 = "0.10"
+hex = "0.4"
 
 # Internal crates
 orbit-core = { path = "crates/orbit-core" }
