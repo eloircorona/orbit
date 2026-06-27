@@ -1033,6 +1033,7 @@ dependencies = [
  "orbit-client",
  "orbit-core",
  "ratatui",
+ "serde_json",
  "tokio",
  "tracing",
 ]

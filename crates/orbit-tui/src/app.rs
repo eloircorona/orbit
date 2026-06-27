@@ -45,6 +45,8 @@ pub enum Mode {
     Help,
     ConfirmKill(Session),
     SessionDetails(Session),
+    AddMcp(AddMcpState),
+    ConfirmRemoveMcp(crate::mcp::McpEntry),
 }
 
 // ── engines ───────────────────────────────────────────────────────────────────
@@ -144,6 +146,102 @@ impl LaunchState {
     }
 }
 
+// ── add-mcp state ─────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum AddMcpField {
+    Name,
+    Command,
+    Args,
+    Env,
+    Scope,
+    Confirm,
+}
+
+impl AddMcpField {
+    pub fn next(self) -> Self {
+        match self {
+            AddMcpField::Name => AddMcpField::Command,
+            AddMcpField::Command => AddMcpField::Args,
+            AddMcpField::Args => AddMcpField::Env,
+            AddMcpField::Env => AddMcpField::Scope,
+            AddMcpField::Scope => AddMcpField::Confirm,
+            AddMcpField::Confirm => AddMcpField::Name,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            AddMcpField::Name => AddMcpField::Confirm,
+            AddMcpField::Command => AddMcpField::Name,
+            AddMcpField::Args => AddMcpField::Command,
+            AddMcpField::Env => AddMcpField::Args,
+            AddMcpField::Scope => AddMcpField::Env,
+            AddMcpField::Confirm => AddMcpField::Scope,
+        }
+    }
+}
+
+pub struct AddMcpState {
+    pub name: TextInput,
+    pub command: TextInput,
+    pub args: TextInput,
+    pub env: TextInput,
+    pub scope_global: bool,
+    pub focused: AddMcpField,
+}
+
+impl AddMcpState {
+    pub fn new() -> Self {
+        Self {
+            name: TextInput::new("Name", "server-name"),
+            command: TextInput::new("Command", "npx"),
+            args: TextInput::new("Args", "-y @scope/mcp-package"),
+            env: TextInput::new("Env", "KEY=VALUE"),
+            scope_global: true,
+            focused: AddMcpField::Name,
+        }
+    }
+
+    pub fn focused_input_mut(&mut self) -> Option<&mut TextInput> {
+        match self.focused {
+            AddMcpField::Name => Some(&mut self.name),
+            AddMcpField::Command => Some(&mut self.command),
+            AddMcpField::Args => Some(&mut self.args),
+            AddMcpField::Env => Some(&mut self.env),
+            _ => None,
+        }
+    }
+
+    pub fn target_path(&self, ai_root: &Path, default_tenant: &str) -> PathBuf {
+        if self.scope_global || default_tenant.is_empty() {
+            ai_root.join("mcp.json")
+        } else {
+            ai_root
+                .join("tenants")
+                .join(default_tenant)
+                .join("mcp.json")
+        }
+    }
+
+    pub fn args_list(&self) -> Vec<String> {
+        self.args
+            .as_str()
+            .split_whitespace()
+            .map(String::from)
+            .collect()
+    }
+
+    pub fn env_map(&self) -> std::collections::HashMap<String, String> {
+        self.env
+            .as_str()
+            .split(',')
+            .filter_map(|pair| pair.trim().split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.to_string()))
+            .collect()
+    }
+}
+
 // ── system state ──────────────────────────────────────────────────────────────
 
 pub struct SystemState {
@@ -153,6 +251,8 @@ pub struct SystemState {
     pub install_dir: PathBuf,
     pub dev_mode: bool,
     pub daemon_running: bool,
+    pub mcp_entries: Vec<crate::mcp::McpEntry>,
+    pub mcp_selected: usize,
 }
 
 impl SystemState {
@@ -162,6 +262,7 @@ impl SystemState {
         let install_dir = cfg.install_dir_expanded();
         let dev_mode = is_dev_mode(&install_dir);
         let daemon_running = socket_path().exists();
+        let mcp_entries = crate::mcp::load_entries(&ai_root, &cfg.engine.default_tenant);
 
         Self {
             ai_root,
@@ -170,12 +271,22 @@ impl SystemState {
             install_dir,
             dev_mode,
             daemon_running,
+            mcp_entries,
+            mcp_selected: 0,
         }
     }
 
     pub fn refresh(&mut self) {
         self.dev_mode = is_dev_mode(&self.install_dir);
         self.daemon_running = socket_path().exists();
+        self.reload_mcp();
+    }
+
+    pub fn reload_mcp(&mut self) {
+        self.mcp_entries = crate::mcp::load_entries(&self.ai_root, &self.default_tenant);
+        self.mcp_selected = self
+            .mcp_selected
+            .min(self.mcp_entries.len().saturating_sub(1));
     }
 }
 
@@ -329,6 +440,30 @@ impl App {
         self.refresh_sessions();
     }
 
+    pub fn mcp_move_up(&mut self) {
+        let n = self.sys.mcp_entries.len();
+        if n == 0 {
+            return;
+        }
+        self.sys.mcp_selected = if self.sys.mcp_selected == 0 {
+            n - 1
+        } else {
+            self.sys.mcp_selected - 1
+        };
+    }
+
+    pub fn mcp_move_down(&mut self) {
+        let n = self.sys.mcp_entries.len();
+        if n == 0 {
+            return;
+        }
+        self.sys.mcp_selected = (self.sys.mcp_selected + 1) % n;
+    }
+
+    pub fn selected_mcp(&self) -> Option<&crate::mcp::McpEntry> {
+        self.sys.mcp_entries.get(self.sys.mcp_selected)
+    }
+
     pub fn handle_key(&mut self, code: KeyCode, _mods: KeyModifiers) {
         if !matches!(self.mode, Mode::Normal) {
             self.handle_popup_key(code);
@@ -408,6 +543,72 @@ impl App {
                     // Esc or any other key: close popup
                 }
             },
+            Mode::AddMcp(mut state) => match code {
+                KeyCode::Esc => {}
+                KeyCode::Enter if state.focused == AddMcpField::Confirm => {
+                    let name = state.name.as_str().to_string();
+                    let cmd = state.command.as_str().to_string();
+                    if name.is_empty() || cmd.is_empty() {
+                        self.status_msg = Some("Name and Command are required.".into());
+                        self.mode = Mode::AddMcp(state);
+                    } else {
+                        let path =
+                            state.target_path(&self.sys.ai_root, &self.sys.default_tenant);
+                        let args = state.args_list();
+                        let env_map = state.env_map();
+                        match crate::mcp::add_server(&path, &name, &cmd, &args, env_map) {
+                            Ok(()) => {
+                                self.status_msg =
+                                    Some(format!("Added MCP server \"{name}\"."));
+                                self.sys.reload_mcp();
+                            }
+                            Err(e) => {
+                                self.status_msg =
+                                    Some(format!("Failed to add MCP server: {e}"));
+                            }
+                        }
+                        // mode stays Normal (success or I/O error)
+                    }
+                }
+                _ => {
+                    let consumed = if let Some(input) = state.focused_input_mut() {
+                        input.handle_key(code)
+                    } else {
+                        false
+                    };
+                    if !consumed {
+                        match code {
+                            KeyCode::Up => state.focused = state.focused.prev(),
+                            KeyCode::Down | KeyCode::Enter => {
+                                state.focused = state.focused.next()
+                            }
+                            KeyCode::Left | KeyCode::Right
+                                if state.focused == AddMcpField::Scope =>
+                            {
+                                state.scope_global = !state.scope_global;
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.mode = Mode::AddMcp(state);
+                }
+            },
+            Mode::ConfirmRemoveMcp(entry) => {
+                if matches!(code, KeyCode::Char('y') | KeyCode::Char('Y')) {
+                    let name = entry.name.clone();
+                    let path = entry.source_file.clone();
+                    match crate::mcp::remove_server(&path, &name) {
+                        Ok(()) => {
+                            self.status_msg = Some(format!("Removed \"{name}\"."));
+                            self.sys.reload_mcp();
+                        }
+                        Err(e) => {
+                            self.status_msg = Some(format!("Failed to remove MCP: {e}"));
+                        }
+                    }
+                }
+                // any other key: cancel (mode stays Normal)
+            }
             Mode::Normal => {}
         }
     }
@@ -478,6 +679,16 @@ impl App {
 
     fn handle_system_key(&mut self, code: KeyCode) {
         match code {
+            KeyCode::Up | KeyCode::Char('k') => self.mcp_move_up(),
+            KeyCode::Down | KeyCode::Char('j') => self.mcp_move_down(),
+            KeyCode::Char('a') => {
+                self.mode = Mode::AddMcp(AddMcpState::new());
+            }
+            KeyCode::Char('x') | KeyCode::Delete => {
+                if let Some(entry) = self.selected_mcp().cloned() {
+                    self.mode = Mode::ConfirmRemoveMcp(entry);
+                }
+            }
             KeyCode::Char('s') => {
                 self.pending_async = Some(if self.sys.daemon_running {
                     AsyncAction::DaemonStop

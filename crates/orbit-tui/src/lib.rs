@@ -1,4 +1,5 @@
 mod app;
+mod mcp;
 mod widget;
 mod views;
 

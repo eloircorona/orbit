@@ -36,6 +36,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Mode::Help => popup::render_help(f, area),
         Mode::ConfirmKill(s) => popup::render_confirm_kill(f, area, s.clone()),
         Mode::SessionDetails(s) => popup::render_details(f, area, s.clone()),
+        Mode::AddMcp(state) => popup::render_add_mcp(f, area, state, &app.sys.default_tenant),
+        Mode::ConfirmRemoveMcp(entry) => popup::render_confirm_remove_mcp(f, area, entry),
         Mode::Normal => {}
     }
 }
@@ -117,8 +119,14 @@ fn render_footer(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             Tab::System => Line::from(vec![
                 hint(" [Tab]"),
                 Span::raw(" switch  "),
+                hint("[↑↓/jk]"),
+                Span::raw(" MCP nav  "),
+                hint("[a]"),
+                Span::raw(" add  "),
+                hint("[x]"),
+                Span::raw(" remove  "),
                 hint("[s]"),
-                Span::raw(" daemon toggle  "),
+                Span::raw(" daemon  "),
                 hint("[r]"),
                 Span::raw(" refresh  "),
                 hint("[q]"),
