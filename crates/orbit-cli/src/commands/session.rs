@@ -71,12 +71,11 @@ fn list() -> Result<()> {
         .max(20);
 
     println!(
-        "{:<id_w$}  {:<eng_w$}  {:<scope_w$}  {:<6}  {}",
+        "{:<id_w$}  {:<eng_w$}  {:<scope_w$}  {:<6}  STARTED",
         "ID",
         "ENGINE",
         "SCOPE",
         "STATUS",
-        "STARTED",
         id_w = id_w,
         eng_w = eng_w,
         scope_w = scope_w,

@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use orbit_core::{user_config::UserConfig, workspace_config::WorkspaceConfig};
 use sha2::{Digest, Sha256};
-use std::{fs, io::Read, path::PathBuf};
+use std::{fs, io::Read, path::Path};
 
 #[derive(Debug, Args)]
 pub struct DevArgs {
@@ -217,13 +217,13 @@ fn create_token() -> Result<(String, String)> {
 
 // ── path helpers ──────────────────────────────────────────────────────────────
 
-fn is_symlink(path: &PathBuf) -> bool {
+fn is_symlink(path: &Path) -> bool {
     path.symlink_metadata()
         .map(|m| m.file_type().is_symlink())
         .unwrap_or(false)
 }
 
-fn is_dev_symlink(orbit: &PathBuf, orbit_dev: &PathBuf) -> bool {
+fn is_dev_symlink(orbit: &Path, orbit_dev: &Path) -> bool {
     if !is_symlink(orbit) {
         return false;
     }

@@ -42,6 +42,7 @@ pub struct InstallSection {
 
 // ── defaults ──────────────────────────────────────────────────────────────────
 
+#[allow(clippy::derivable_impls)]
 impl Default for UserConfig {
     fn default() -> Self {
         Self {
@@ -139,8 +140,8 @@ fn xdg_config_dir() -> PathBuf {
 /// Replace a leading `~` with the real home directory path.
 pub fn expand_tilde(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
-    if s.starts_with("~/") {
-        home_dir().join(&s[2..])
+    if let Some(stripped) = s.strip_prefix("~/") {
+        home_dir().join(stripped)
     } else if s == "~" {
         home_dir()
     } else {

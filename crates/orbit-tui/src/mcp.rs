@@ -73,7 +73,7 @@ pub fn add_server(
         serde_json::json!({})
     };
 
-    if !json.get("mcpServers").map_or(false, |v| v.is_object()) {
+    if !json.get("mcpServers").is_some_and(|v| v.is_object()) {
         json["mcpServers"] = serde_json::json!({});
     }
 

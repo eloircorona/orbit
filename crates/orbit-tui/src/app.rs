@@ -736,13 +736,12 @@ async fn run_app<B: ratatui::backend::Backend>(
             handle_async_action(action, app).await;
         }
 
-        if event::poll(Duration::from_millis(200))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    app.status_msg = None;
-                    app.handle_key(key.code, key.modifiers);
-                }
-            }
+        if event::poll(Duration::from_millis(200))?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            app.status_msg = None;
+            app.handle_key(key.code, key.modifiers);
         }
 
         if last_refresh.elapsed() > Duration::from_secs(2) {

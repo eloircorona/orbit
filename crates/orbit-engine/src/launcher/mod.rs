@@ -11,15 +11,10 @@ use crate::config::MergedConfig;
 
 // ── public API ────────────────────────────────────────────────────────────────
 
+#[derive(Default)]
 pub struct LaunchOptions {
     /// Skip tmux wrapping even if tmux is available.
     pub no_tmux: bool,
-}
-
-impl Default for LaunchOptions {
-    fn default() -> Self {
-        Self { no_tmux: false }
-    }
 }
 
 /// Full launch sequence:

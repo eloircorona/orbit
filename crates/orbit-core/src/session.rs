@@ -27,6 +27,7 @@ pub struct Session {
 }
 
 impl Session {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         pid: u32,
         engine: &str,
@@ -99,7 +100,7 @@ impl Session {
         };
         let mut sessions: Vec<Session> = entries
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |x| x == "json"))
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
             .filter_map(|e| {
                 fs::read_to_string(e.path())
                     .ok()

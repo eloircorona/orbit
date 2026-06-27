@@ -11,10 +11,10 @@ use std::{
 /// Materialise agent, command, and skill files for the engine.
 ///
 /// - OpenCode: writes `.opencode/agents|commands|skills` in the runtime dir,
-///             then copies them into `work_dir/.opencode/`.
-/// - Claude:   writes `.claude/CLAUDE.md` + `.claude/agents/`, then symlinks
-///             `work_dir/.claude` → runtime `.claude`.
-/// - Gemini:   no agent container needed (uses `includeDirectories`).
+///   then copies them into `work_dir/.opencode/`.
+/// - Claude: writes `.claude/CLAUDE.md` + `.claude/agents/`, then symlinks
+///   `work_dir/.claude` → runtime `.claude`.
+/// - Gemini: no agent container needed (uses `includeDirectories`).
 pub fn build(
     scope: &OrbitScope,
     engine: Engine,
@@ -117,7 +117,7 @@ fn build_opencode(scope: &OrbitScope, runtime_dir: &Path) -> Result<()> {
                 }
             }
             None => {
-                let description = meta_description(&meta, &name);
+                let description = meta_description(meta, &name);
                 let body = format!("You are the {name} agent.");
                 write_agent_file(&agents_dir, &name, &description, &body, None)?;
             }
@@ -169,7 +169,7 @@ fn build_claude(scope: &OrbitScope, runtime_dir: &Path, instructions: &[PathBuf]
     // ── agents ────────────────────────────────────────────────────────────────
     for (name, meta) in manifest_section(&manifest, "agents") {
         let source = shared.join("agents").join(format!("{name}.md"));
-        let description = meta_description(&meta, &name);
+        let description = meta_description(meta, &name);
         let body = read_opt(&source).unwrap_or_else(|| format!("You are the {name} agent."));
         let extra = if name == "reviewer" {
             Some(vec![("tools", vec!["Read", "Grep", "Glob"])])
