@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use directories::BaseDirs;
-use orbit_core::context::OrbitScope;
+use orbit_core::{context::OrbitScope, user_config::UserConfig};
 use std::path::{Path, PathBuf};
 
 /// Arguments for scope resolution — direct mapping from CLI flags.
@@ -13,26 +13,40 @@ pub struct ResolveArgs {
 }
 
 /// Public entry point. Resolves args against the real filesystem.
+/// Reads `ai_root` from `~/.config/orbit/config.toml` (falls back to `~/AI`).
 pub fn resolve(args: ResolveArgs) -> Result<OrbitScope> {
     let base_dirs = BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
-    resolve_with_home(args, base_dirs.home_dir())
+    let ai_root = UserConfig::load().ai_root_expanded();
+    resolve_inner(args, base_dirs.home_dir(), &ai_root)
 }
 
-/// Testable core: same logic but accepts an explicit home directory.
+/// Testable core: accepts explicit home and ai_root paths.
 pub fn resolve_with_home(args: ResolveArgs, home: &Path) -> Result<OrbitScope> {
+    let ai_root = home.join("AI");
+    resolve_inner(args, home, &ai_root)
+}
+
+/// Testable core with fully explicit paths.
+pub fn resolve_with_roots(args: ResolveArgs, home: &Path, ai_root: &Path) -> Result<OrbitScope> {
+    resolve_inner(args, home, ai_root)
+}
+
+fn resolve_inner(args: ResolveArgs, home: &Path, ai_root: &Path) -> Result<OrbitScope> {
     // ── global mode: no arguments at all ─────────────────────────────────────
     if args.workspace.is_none() {
-        let workspace_root = home.join("AI");
-        if !workspace_root.is_dir() {
-            bail!("global AI root not found: {}", workspace_root.display());
+        if !ai_root.is_dir() {
+            bail!(
+                "AI root not found: {}\nRun `orbit setup` to configure or `orbit init` to clone the governance repo.",
+                ai_root.display()
+            );
         }
         return Ok(OrbitScope {
-            ai_context_root: workspace_root.clone(),
-            global_ai_root: workspace_root.clone(),
-            code_root: workspace_root.clone(),
-            work_dir: workspace_root.clone(),
-            workspace_root,
+            ai_context_root: ai_root.to_path_buf(),
+            global_ai_root: ai_root.to_path_buf(),
+            code_root: ai_root.to_path_buf(),
+            work_dir: ai_root.to_path_buf(),
+            workspace_root: ai_root.to_path_buf(),
             global_mode: true,
             ..Default::default()
         });
@@ -43,9 +57,14 @@ pub fn resolve_with_home(args: ResolveArgs, home: &Path) -> Result<OrbitScope> {
     let workspace_root = find_dir_icase(home, workspace_str)
         .ok_or_else(|| anyhow::anyhow!("workspace not found: {workspace_str}"))?;
 
-    // AI_CONTEXT_ROOT: prefer WORKSPACE_ROOT/AI when it has a tenants/ subdirectory
+    // AI_CONTEXT_ROOT: prefer WORKSPACE_ROOT/<ai_root_name> when it has tenants/
+    let ai_root_name = ai_root
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "AI".to_string());
+
     let ai_context_root = {
-        let candidate = workspace_root.join("AI");
+        let candidate = workspace_root.join(&ai_root_name);
         if candidate.join("tenants").is_dir() {
             candidate
         } else {
@@ -53,12 +72,16 @@ pub fn resolve_with_home(args: ResolveArgs, home: &Path) -> Result<OrbitScope> {
         }
     };
 
-    let global_ai_root = home.join("AI");
     let tenants_root = ai_context_root.join("tenants");
 
     // ── resolve tenant ────────────────────────────────────────────────────────
-    // Default tenant is "AI" (same as the bash launcher)
-    let tenant_input = args.tenant.as_deref().unwrap_or("AI");
+    let user_cfg = UserConfig::load();
+    let default_tenant = if user_cfg.engine.default_tenant.is_empty() {
+        "AI"
+    } else {
+        &user_cfg.engine.default_tenant
+    };
+    let tenant_input = args.tenant.as_deref().unwrap_or(default_tenant);
     let tenant = resolve_name(&tenants_root, tenant_input);
 
     // ── resolve project ───────────────────────────────────────────────────────
@@ -98,7 +121,7 @@ pub fn resolve_with_home(args: ResolveArgs, home: &Path) -> Result<OrbitScope> {
     Ok(OrbitScope {
         workspace_root,
         ai_context_root,
-        global_ai_root,
+        global_ai_root: ai_root.to_path_buf(),
         tenant,
         project,
         repository,
@@ -135,7 +158,6 @@ fn find_dir_icase(root: &Path, target: &str) -> Option<PathBuf> {
         })
         .collect();
 
-    // Sort so the result is deterministic when there are multiple matches
     entries.sort();
     entries.into_iter().next()
 }
@@ -148,16 +170,6 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    /// Creates a minimal fake home directory:
-    ///
-    ///   <tmp>/
-    ///   └── AI/
-    ///       └── tenants/
-    ///           └── AIDEV/
-    ///               └── projects/
-    ///                   └── AI-ECOSYSTEM/
-    ///                       └── repositories/
-    ///                           └── orbit/
     fn fake_home() -> TempDir {
         let tmp = TempDir::new().unwrap();
         let repo = tmp.path()
@@ -170,7 +182,6 @@ mod tests {
     fn global_mode_opens_ai_root() {
         let home = fake_home();
         let scope = resolve_with_home(ResolveArgs::default(), home.path()).unwrap();
-
         assert!(scope.global_mode);
         assert_eq!(scope.workspace_root, home.path().join("AI"));
         assert!(scope.tenant.is_empty());
@@ -179,10 +190,7 @@ mod tests {
     #[test]
     fn resolves_workspace_case_insensitive() {
         let home = fake_home();
-        let args = ResolveArgs {
-            workspace: Some("ai".to_string()), // lowercase — disk has "AI"
-            ..Default::default()
-        };
+        let args = ResolveArgs { workspace: Some("ai".to_string()), ..Default::default() };
         let scope = resolve_with_home(args, home.path()).unwrap();
         assert_eq!(scope.workspace_root, home.path().join("AI"));
     }
@@ -192,7 +200,7 @@ mod tests {
         let home = fake_home();
         let args = ResolveArgs {
             workspace: Some("ai".to_string()),
-            tenant: Some("aidev".to_string()), // lowercase — disk has "AIDEV"
+            tenant: Some("aidev".to_string()),
             ..Default::default()
         };
         let scope = resolve_with_home(args, home.path()).unwrap();
@@ -205,29 +213,20 @@ mod tests {
         let args = ResolveArgs {
             workspace: Some("AI".to_string()),
             tenant: Some("AIDEV".to_string()),
-            project: Some("ai-ecosystem".to_string()),    // lowercase
-            repository: Some("ORBIT".to_string()),        // uppercase
+            project: Some("ai-ecosystem".to_string()),
+            repository: Some("ORBIT".to_string()),
         };
         let scope = resolve_with_home(args, home.path()).unwrap();
-
         assert_eq!(scope.tenant, "AIDEV");
         assert_eq!(scope.project, "AI-ECOSYSTEM");
         assert_eq!(scope.repository, "orbit");
-
-        // work_dir should point to the repository
-        assert_eq!(
-            scope.work_dir,
-            home.path().join("AI/AIDEV/AI-ECOSYSTEM/orbit")
-        );
+        assert_eq!(scope.work_dir, home.path().join("AI/AIDEV/AI-ECOSYSTEM/orbit"));
     }
 
     #[test]
     fn missing_workspace_returns_error() {
         let home = fake_home();
-        let args = ResolveArgs {
-            workspace: Some("nonexistent".to_string()),
-            ..Default::default()
-        };
+        let args = ResolveArgs { workspace: Some("nonexistent".to_string()), ..Default::default() };
         assert!(resolve_with_home(args, home.path()).is_err());
     }
 
@@ -241,9 +240,18 @@ mod tests {
             repository: None,
         };
         let scope = resolve_with_home(args, home.path()).unwrap();
-        assert_eq!(
-            scope.work_dir,
-            home.path().join("AI/AIDEV/AI-ECOSYSTEM")
-        );
+        assert_eq!(scope.work_dir, home.path().join("AI/AIDEV/AI-ECOSYSTEM"));
+    }
+
+    #[test]
+    fn custom_ai_root_is_used() {
+        let home = TempDir::new().unwrap();
+        let ai_root = home.path().join("MyAI");
+        fs::create_dir_all(ai_root.join("tenants/CORP/projects/P/repositories/R")).unwrap();
+
+        let args = ResolveArgs::default();
+        let scope = resolve_with_roots(args, home.path(), &ai_root).unwrap();
+        assert!(scope.global_mode);
+        assert_eq!(scope.global_ai_root, ai_root);
     }
 }

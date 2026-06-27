@@ -12,6 +12,12 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    /// First-time setup: write config and install the binary
+    Setup(commands::setup::SetupArgs),
+    /// Clone the governance repository into the AI root
+    Init(commands::init::InitArgs),
+    /// Sync governance configs and/or update the binary
+    Update(commands::update::UpdateArgs),
     /// Launch an AI engine (opencode/gemini/claude) with full context resolution
     Launch(commands::launch::LaunchArgs),
     /// Manage active sessions
@@ -21,7 +27,6 @@ pub enum Commands {
 }
 
 impl Cli {
-    /// Entry point for `orbit-dev`: same commands + dev-only extras
     pub fn parse_dev() -> Self {
         Self::parse()
     }
@@ -29,11 +34,13 @@ impl Cli {
 
 pub async fn run(cli: Cli) -> Result<()> {
     match cli.command {
+        Some(Commands::Setup(args)) => commands::setup::run(args).await,
+        Some(Commands::Init(args)) => commands::init::run(args).await,
+        Some(Commands::Update(args)) => commands::update::run(args).await,
         Some(Commands::Launch(args)) => commands::launch::run(args).await,
         Some(Commands::Session(args)) => commands::session::run(args).await,
         Some(Commands::Daemon(args)) => commands::daemon::run(args).await,
         None => {
-            // No subcommand → TUI (not yet implemented)
             println!("TUI not yet implemented. Use `orbit launch` to start a session.");
             Ok(())
         }
