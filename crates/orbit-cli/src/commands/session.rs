@@ -3,6 +3,7 @@ use clap::{Args, Subcommand};
 use orbit_core::session::Session;
 use std::{
     io::{self, Write},
+    os::unix::process::CommandExt,
     process::Command,
 };
 
@@ -27,6 +28,12 @@ pub enum SessionCommand {
     },
     /// Remove session files for processes that are no longer running
     Clean,
+    /// Reattach to a running session's tmux window.
+    /// If no ID is given, shows an interactive selector.
+    Attach {
+        /// Session ID (from `orbit session list`). Omit for interactive selection.
+        id: Option<String>,
+    },
 }
 
 pub async fn run(args: SessionArgs) -> Result<()> {
@@ -34,6 +41,7 @@ pub async fn run(args: SessionArgs) -> Result<()> {
         SessionCommand::List => list(),
         SessionCommand::Kill { id, force } => kill(id.as_deref(), force),
         SessionCommand::Clean => clean(),
+        SessionCommand::Attach { id } => attach(id.as_deref()),
     }
 }
 
@@ -163,6 +171,63 @@ fn send_signal(session: &Session, force: bool) -> Result<()> {
         );
     }
     Ok(())
+}
+
+// ── attach ────────────────────────────────────────────────────────────────────
+
+fn attach(id: Option<&str>) -> Result<()> {
+    let sessions = Session::load_all();
+    let attachable: Vec<&Session> = sessions
+        .iter()
+        .filter(|s| s.is_running() && s.has_tmux())
+        .collect();
+
+    let session = match id {
+        Some(id) => sessions
+            .iter()
+            .find(|s| s.id == id || s.id.starts_with(id))
+            .ok_or_else(|| anyhow::anyhow!(
+                "session not found: {id}\nRun `orbit session list` to see available sessions."
+            ))?,
+        None => {
+            if attachable.is_empty() {
+                if sessions.iter().any(|s| s.is_running()) {
+                    bail!(
+                        "Running sessions found but none were launched with tmux.\n\
+                         Use `orbit launch` (without --no-tmux) to enable session resuming."
+                    );
+                } else {
+                    bail!("No active sessions. Start one with `orbit launch`.");
+                }
+            }
+            select_session(&attachable)?
+        }
+    };
+
+    let Some(ref tmux_name) = session.tmux_session else {
+        bail!(
+            "Session {} was not launched with tmux — cannot reattach.\n\
+             Kill it and relaunch without --no-tmux.",
+            session.id
+        );
+    };
+
+    if !session.is_running() {
+        bail!(
+            "Session {} is no longer running. Run `orbit session clean` to remove it.",
+            session.id
+        );
+    }
+
+    // If already inside tmux, switch to the target session instead of nesting
+    let tmux_cmd = if std::env::var("TMUX").is_ok() {
+        vec!["switch-client", "-t", tmux_name.as_str()]
+    } else {
+        vec!["attach-session", "-t", tmux_name.as_str()]
+    };
+
+    let err = Command::new("tmux").args(&tmux_cmd).exec();
+    bail!("failed to exec tmux: {err}");
 }
 
 // ── clean ─────────────────────────────────────────────────────────────────────

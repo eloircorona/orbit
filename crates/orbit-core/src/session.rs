@@ -21,6 +21,9 @@ pub struct Session {
     /// Unix timestamp (seconds)
     pub started_at: u64,
     pub global_mode: bool,
+    /// tmux session name, if the engine was launched inside tmux
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tmux_session: Option<String>,
 }
 
 impl Session {
@@ -32,6 +35,7 @@ impl Session {
         repository: &str,
         work_dir: PathBuf,
         global_mode: bool,
+        tmux_session: Option<String>,
     ) -> Self {
         let started_at = now_secs();
         let id = format!("{pid}-{started_at}");
@@ -45,7 +49,13 @@ impl Session {
             work_dir,
             started_at,
             global_mode,
+            tmux_session,
         }
+    }
+
+    /// `true` if this session was launched inside a tmux session.
+    pub fn has_tmux(&self) -> bool {
+        self.tmux_session.is_some()
     }
 
     /// `~/.local/share/orbit/sessions/`
@@ -178,7 +188,7 @@ mod tests {
 
     fn make_session(pid: u32) -> Session {
         Session::new(pid, "opencode", "AIDEV", "AI-ECOSYSTEM", "orbit",
-            PathBuf::from("/work"), false)
+            PathBuf::from("/work"), false, None)
     }
 
     #[test]
@@ -203,7 +213,7 @@ mod tests {
     #[test]
     fn scope_label_partial() {
         let s = Session::new(1, "claude", "AIDEV", "AI-ECOSYSTEM", "",
-            PathBuf::from("/work"), false);
+            PathBuf::from("/work"), false, None);
         assert_eq!(s.scope_label(), "AIDEV / AI-ECOSYSTEM");
     }
 

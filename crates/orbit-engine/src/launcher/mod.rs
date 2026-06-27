@@ -8,26 +8,42 @@ use std::{fs, os::unix::process::CommandExt, path::Path, process::Command};
 
 use crate::config::MergedConfig;
 
+// ── public API ────────────────────────────────────────────────────────────────
+
+pub struct LaunchOptions {
+    /// Skip tmux wrapping even if tmux is available.
+    pub no_tmux: bool,
+}
+
+impl Default for LaunchOptions {
+    fn default() -> Self {
+        Self { no_tmux: false }
+    }
+}
+
 /// Full launch sequence:
 /// 1. Create runtime directory structure
 /// 2. Materialise agent/command files for the engine
 /// 3. Render and write the engine config file
-/// 4. Export environment variables
-/// 5. `exec` into the engine — replaces the current process (no return on success)
-pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine) -> Result<()> {
+/// 4. Register session (before env override)
+/// 5. Set environment variables
+/// 6. `exec` into tmux (wrapping the engine) or directly into the engine
+pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine, opts: LaunchOptions) -> Result<()> {
     // 1. Runtime dirs
     let paths = runtime::setup(scope, engine)?;
 
-    // 2. Agent materialisation (.opencode/agents/ or .claude/agents/ + CLAUDE.md)
+    // 2. Agent materialisation
     agents::build(scope, engine, &paths.runtime_dir, &config.instructions)?;
 
     // 3. Write config file
     let rendered = render::render(config, engine);
-    let json_str = serde_json::to_string_pretty(&rendered)?;
-    fs::write(&paths.config_file, json_str)?;
+    fs::write(&paths.config_file, serde_json::to_string_pretty(&rendered)?)?;
 
-    // 4. Register session — must happen BEFORE set_env() overwrites XDG_DATA_HOME.
-    //    Session::sessions_dir() reads the real system XDG_DATA_HOME here.
+    // 4. Decide tmux strategy before registering the session
+    let tmux_name = tmux_session_name(scope, engine);
+    let use_tmux = !opts.no_tmux && tmux_available() && !already_in_tmux();
+
+    // 5. Register session — BEFORE set_env() overwrites XDG_DATA_HOME
     let session = Session::new(
         std::process::id(),
         engine.as_str(),
@@ -36,35 +52,138 @@ pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine) -> Resu
         &scope.repository,
         scope.work_dir.clone(),
         scope.global_mode,
+        if use_tmux { Some(tmux_name.clone()) } else { None },
     );
     if let Err(e) = session.save() {
         tracing::warn!("could not save session: {e}");
     }
 
-    // 5. Environment variables (overrides XDG dirs — do this last before exec)
+    // 6. Set environment variables
     set_env(scope, engine, &paths);
 
-    // 6. cd into work_dir and exec the engine (never returns on success)
+    // 7. cd into work_dir, then exec
     std::env::set_current_dir(&scope.work_dir)?;
-    exec_engine(engine, &paths.config_file)
+
+    if use_tmux {
+        exec_with_tmux(engine, &paths.config_file, &tmux_name)
+    } else {
+        exec_engine(engine, &paths.config_file)
+    }
 }
+
+// ── tmux helpers ──────────────────────────────────────────────────────────────
+
+/// Derive a stable tmux session name from scope + engine.
+/// Example: "orbit-opencode-aidev-ai-ecosystem-orbit"
+pub fn tmux_session_name(scope: &OrbitScope, engine: Engine) -> String {
+    let parts: Vec<String> = if scope.global_mode {
+        vec![engine.as_str().to_string()]
+    } else {
+        let mut p = vec![engine.as_str().to_string()];
+        for seg in [&scope.tenant, &scope.project, &scope.repository] {
+            if !seg.is_empty() {
+                p.push(seg.to_lowercase());
+            }
+        }
+        p
+    };
+    format!("orbit-{}", parts.join("-"))
+}
+
+/// `true` if the `tmux` binary is on PATH.
+pub fn tmux_available() -> bool {
+    Command::new("which")
+        .arg("tmux")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// `true` if we're already running inside a tmux session.
+pub fn already_in_tmux() -> bool {
+    std::env::var("TMUX").is_ok()
+}
+
+/// `true` if a tmux session with the given name already exists.
+pub fn tmux_session_exists(name: &str) -> bool {
+    Command::new("tmux")
+        .args(["has-session", "-t", name])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// exec into tmux, either creating a new session or reattaching to an existing one.
+/// All env vars set by set_env() are inherited by tmux → engine.
+fn exec_with_tmux(engine: Engine, config_file: &Path, session_name: &str) -> Result<()> {
+    if tmux_session_exists(session_name) {
+        // Session already exists — reattach
+        tracing::debug!("reattaching to tmux session {session_name}");
+        let err = Command::new("tmux")
+            .args(["attach-session", "-t", session_name])
+            .exec();
+        bail!("failed to attach to tmux session {session_name}: {err}");
+    }
+
+    // Build the engine command args for tmux
+    let (bin, extra_args) = engine_cmd(engine, config_file);
+
+    // tmux new-session -s <name> <bin> [args...]
+    // Env vars already set in process environment — tmux inherits them.
+    let mut cmd = Command::new("tmux");
+    cmd.arg("new-session").arg("-s").arg(session_name);
+    cmd.arg("--").arg(&bin);
+    for arg in &extra_args {
+        cmd.arg(arg);
+    }
+
+    let err = cmd.exec();
+    bail!("failed to exec tmux new-session: {err}");
+}
+
+// ── direct exec ───────────────────────────────────────────────────────────────
+
+fn exec_engine(engine: Engine, config_file: &Path) -> Result<()> {
+    let (bin, extra_args) = engine_cmd(engine, config_file);
+    let mut cmd = Command::new(&bin);
+    for arg in &extra_args {
+        cmd.arg(arg);
+    }
+    let err = cmd.exec();
+    bail!("failed to exec {}: {}", bin, err);
+}
+
+fn engine_cmd(engine: Engine, config_file: &Path) -> (String, Vec<String>) {
+    match engine {
+        Engine::Claude => (
+            "claude".to_string(),
+            vec![
+                "--mcp-config".to_string(),
+                config_file.to_string_lossy().into_owned(),
+            ],
+        ),
+        Engine::Opencode | Engine::Gemini => (engine.as_str().to_string(), vec![]),
+    }
+}
+
+// ── environment ───────────────────────────────────────────────────────────────
 
 /// Set the environment variables the engine expects.
 ///
 /// # Safety
 /// `set_var` is unsafe in Rust 1.80+ because it is not thread-safe.
-/// This is safe here: the launcher runs in a single-threaded context and
-/// sets env vars immediately before `exec`-ing the engine — no other threads
-/// are reading the environment concurrently.
+/// Safe here: single-threaded, called immediately before exec.
 fn set_env(scope: &OrbitScope, engine: Engine, paths: &runtime::RuntimePaths) {
     unsafe {
-        // XDG isolation — keeps each engine/tenant in its own runtime
         std::env::set_var("XDG_CONFIG_HOME", &paths.xdg_config_home);
         std::env::set_var("XDG_DATA_HOME", &paths.xdg_data);
         std::env::set_var("XDG_CACHE_HOME", &paths.xdg_cache);
         std::env::set_var("XDG_STATE_HOME", &paths.xdg_state);
 
-        // Orbit scope — available to the engine and any hooks/scripts it runs
         std::env::set_var("AI_ENGINE", engine.as_str());
         std::env::set_var("AI_WORKSPACE_ROOT", scope.workspace_root.to_string_lossy().as_ref());
         std::env::set_var("AI_CONTEXT_ROOT", scope.ai_context_root.to_string_lossy().as_ref());
@@ -74,7 +193,6 @@ fn set_env(scope: &OrbitScope, engine: Engine, paths: &runtime::RuntimePaths) {
         std::env::set_var("AI_REPOSITORY", &scope.repository);
         std::env::set_var("AI_GLOBAL_MODE", if scope.global_mode { "1" } else { "0" });
 
-        // Engine-specific config pointers
         match engine {
             Engine::Opencode => {
                 std::env::set_var("OPENCODE_CONFIG", &paths.config_file);
@@ -83,28 +201,9 @@ fn set_env(scope: &OrbitScope, engine: Engine, paths: &runtime::RuntimePaths) {
                 std::env::set_var("GEMINI_CLI_HOME", &paths.runtime_dir);
                 std::env::set_var("GEMINI_CLI_SYSTEM_SETTINGS_PATH", &paths.config_file);
             }
-            Engine::Claude => {
-                // Claude reads auth from ~/.claude — no CLAUDE_CONFIG_DIR override needed.
-                // MCPs are passed via --mcp-config at exec time (see exec_engine below).
-            }
+            Engine::Claude => {}
         }
     }
-}
-
-/// Replace the current process with the engine binary.
-/// On success this never returns — the OS replaces us with the engine.
-fn exec_engine(engine: Engine, config_file: &Path) -> Result<()> {
-    let mut cmd = match engine {
-        Engine::Claude => {
-            let mut c = Command::new("claude");
-            c.arg("--mcp-config").arg(config_file);
-            c
-        }
-        Engine::Opencode | Engine::Gemini => Command::new(engine.as_str()),
-    };
-
-    let err = cmd.exec(); // replaces the process; only returns on error
-    bail!("failed to exec {}: {}", engine.as_str(), err);
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -112,7 +211,7 @@ fn exec_engine(engine: Engine, config_file: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{MergedConfig, McpServer};
+    use crate::config::{McpServer, MergedConfig};
     use orbit_core::context::OrbitScope;
     use std::{collections::HashMap, fs, path::PathBuf};
     use tempfile::TempDir;
@@ -164,7 +263,6 @@ mod tests {
         let paths = runtime::setup(&scope, Engine::Opencode).unwrap();
         let rendered = render::render(&cfg, Engine::Opencode);
         fs::write(&paths.config_file, serde_json::to_string_pretty(&rendered).unwrap()).unwrap();
-
         assert!(paths.config_file.exists());
         let content = fs::read_to_string(&paths.config_file).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -179,10 +277,8 @@ mod tests {
         let paths = runtime::setup(&scope, Engine::Claude).unwrap();
         let rendered = render::render(&cfg, Engine::Claude);
         fs::write(&paths.config_file, serde_json::to_string_pretty(&rendered).unwrap()).unwrap();
-
         let content = fs::read_to_string(&paths.config_file).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-        // Claude config must only have mcpServers
         assert_eq!(parsed.as_object().unwrap().len(), 1);
         assert!(parsed["mcpServers"].is_object());
     }
@@ -194,5 +290,26 @@ mod tests {
         let oc = runtime::setup(&scope, Engine::Opencode).unwrap();
         let cl = runtime::setup(&scope, Engine::Claude).unwrap();
         assert_ne!(oc.runtime_dir, cl.runtime_dir);
+    }
+
+    #[test]
+    fn tmux_session_name_full_scope() {
+        let scope = OrbitScope {
+            tenant: "AIDEV".into(),
+            project: "AI-ECOSYSTEM".into(),
+            repository: "orbit".into(),
+            global_mode: false,
+            ..Default::default()
+        };
+        assert_eq!(
+            tmux_session_name(&scope, Engine::Opencode),
+            "orbit-opencode-aidev-ai-ecosystem-orbit"
+        );
+    }
+
+    #[test]
+    fn tmux_session_name_global() {
+        let scope = OrbitScope { global_mode: true, ..Default::default() };
+        assert_eq!(tmux_session_name(&scope, Engine::Claude), "orbit-claude");
     }
 }
