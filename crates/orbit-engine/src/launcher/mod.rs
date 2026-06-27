@@ -3,7 +3,7 @@ pub mod render;
 pub mod runtime;
 
 use anyhow::{bail, Result};
-use orbit_core::{context::OrbitScope, engine::Engine};
+use orbit_core::{context::OrbitScope, engine::Engine, session::Session};
 use std::{fs, os::unix::process::CommandExt, path::Path, process::Command};
 
 use crate::config::MergedConfig;
@@ -26,10 +26,25 @@ pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine) -> Resu
     let json_str = serde_json::to_string_pretty(&rendered)?;
     fs::write(&paths.config_file, json_str)?;
 
-    // 4. Environment variables
+    // 4. Register session — must happen BEFORE set_env() overwrites XDG_DATA_HOME.
+    //    Session::sessions_dir() reads the real system XDG_DATA_HOME here.
+    let session = Session::new(
+        std::process::id(),
+        engine.as_str(),
+        &scope.tenant,
+        &scope.project,
+        &scope.repository,
+        scope.work_dir.clone(),
+        scope.global_mode,
+    );
+    if let Err(e) = session.save() {
+        tracing::warn!("could not save session: {e}");
+    }
+
+    // 5. Environment variables (overrides XDG dirs — do this last before exec)
     set_env(scope, engine, &paths);
 
-    // 5. cd into work_dir and exec the engine
+    // 6. cd into work_dir and exec the engine (never returns on success)
     std::env::set_current_dir(&scope.work_dir)?;
     exec_engine(engine, &paths.config_file)
 }
