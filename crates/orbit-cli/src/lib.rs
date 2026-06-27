@@ -43,6 +43,37 @@ pub async fn run(cli: Cli) -> Result<()> {
         Some(Commands::Launch(args)) => commands::launch::run(args).await,
         Some(Commands::Session(args)) => commands::session::run(args).await,
         Some(Commands::Daemon(args)) => commands::daemon::run(args).await,
-        None => orbit_tui::run().await,
+        None => {
+            if let Some(params) = orbit_tui::run().await? {
+                use orbit_core::engine::Engine;
+                commands::launch::run(commands::launch::LaunchArgs {
+                    workspace: None,
+                    tenant: if params.tenant.is_empty() {
+                        None
+                    } else {
+                        Some(params.tenant)
+                    },
+                    project: if params.project.is_empty() {
+                        None
+                    } else {
+                        Some(params.project)
+                    },
+                    repository: if params.repository.is_empty() {
+                        None
+                    } else {
+                        Some(params.repository)
+                    },
+                    engine: match params.engine {
+                        Engine::Opencode => commands::launch::CliEngine::Opencode,
+                        Engine::Gemini => commands::launch::CliEngine::Gemini,
+                        Engine::Claude => commands::launch::CliEngine::Claude,
+                    },
+                    dry_run: false,
+                    no_tmux: params.no_tmux,
+                })
+                .await?;
+            }
+            Ok(())
+        }
     }
 }

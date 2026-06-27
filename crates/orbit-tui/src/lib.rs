@@ -1,4 +1,17 @@
 mod app;
+mod widget;
 mod views;
 
-pub use app::run;
+use orbit_core::engine::Engine;
+
+pub struct LaunchParams {
+    pub engine: Engine,
+    pub tenant: String,
+    pub project: String,
+    pub repository: String,
+    pub no_tmux: bool,
+}
+
+pub async fn run() -> anyhow::Result<Option<LaunchParams>> {
+    app::run().await
+}
