@@ -654,7 +654,7 @@ impl App {
                             _ => {}
                         }
                     }
-                    self.mode = Mode::AddMcp(state);  // state is Box<AddMcpState>
+                    self.mode = Mode::AddMcp(state); // state is Box<AddMcpState>
                 }
             },
             Mode::ConfirmRemoveMcp(entry) => {
