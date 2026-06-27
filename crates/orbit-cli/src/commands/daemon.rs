@@ -37,7 +37,10 @@ async fn start() -> Result<()> {
     if ipc::is_available() {
         // Try a real connection to verify it's alive, not just a stale socket
         if let Ok(info) = ipc::status().await {
-            println!("Daemon is already running (pid {}, uptime {}s).", info.pid, info.uptime_secs);
+            println!(
+                "Daemon is already running (pid {}, uptime {}s).",
+                info.pid, info.uptime_secs
+            );
             return Ok(());
         }
         // Stale socket — clean it up and continue

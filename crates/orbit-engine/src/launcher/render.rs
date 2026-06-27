@@ -1,6 +1,6 @@
 use crate::config::{McpServer, MergedConfig};
 use orbit_core::engine::Engine;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// Render `MergedConfig` into the JSON structure the target engine expects.
 pub fn render(config: &MergedConfig, engine: Engine) -> Value {
@@ -137,9 +137,12 @@ fn render_gemini(config: &MergedConfig) -> Value {
     context
         .entry("loadFromIncludeDirectories")
         .or_insert(json!(true));
-    context
-        .entry("fileName")
-        .or_insert(json!(["README.md", "GEMINI.md", "CONTEXT.md", "AGENTS.md"]));
+    context.entry("fileName").or_insert(json!([
+        "README.md",
+        "GEMINI.md",
+        "CONTEXT.md",
+        "AGENTS.md"
+    ]));
 
     Value::Object(obj)
 }
@@ -163,7 +166,10 @@ fn render_claude(config: &MergedConfig) -> Value {
 /// Render a server in the split format used by Gemini and Claude:
 /// `{ "command": "bin", "args": [...rest], "env": {...} }`
 fn mcp_split(s: &McpServer) -> Value {
-    let (cmd, args) = s.command.split_first().map_or(("", &[][..]), |(h, t)| (h.as_str(), t));
+    let (cmd, args) = s
+        .command
+        .split_first()
+        .map_or(("", &[][..]), |(h, t)| (h.as_str(), t));
     let mut obj = json!({ "command": cmd });
     if !args.is_empty() {
         obj["args"] = json!(args);
@@ -244,9 +250,13 @@ mod tests {
     #[test]
     fn gemini_builds_include_dirs_from_instructions() {
         let mut cfg = MergedConfig::default();
-        cfg.instructions.push(PathBuf::from("/home/user/AI/source-of-truth/README.md"));
+        cfg.instructions
+            .push(PathBuf::from("/home/user/AI/source-of-truth/README.md"));
         let val = render(&cfg, Engine::Gemini);
         let dirs = val["context"]["includeDirectories"].as_array().unwrap();
-        assert!(dirs.iter().any(|d| d.as_str().unwrap().contains("source-of-truth")));
+        assert!(
+            dirs.iter()
+                .any(|d| d.as_str().unwrap().contains("source-of-truth"))
+        );
     }
 }

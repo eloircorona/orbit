@@ -1,6 +1,6 @@
 use anyhow::Result;
 use orbit_core::{
-    ipc::{pid_path, socket_path, Request, Response},
+    ipc::{Request, Response, pid_path, socket_path},
     session::Session,
 };
 use std::{

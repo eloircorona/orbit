@@ -87,37 +87,51 @@ enum PackageManager {
 impl PackageManager {
     fn name(&self) -> &'static str {
         match self {
-            Self::Apt    => "apt-get",
-            Self::Dnf    => "dnf",
-            Self::Yum    => "yum",
+            Self::Apt => "apt-get",
+            Self::Dnf => "dnf",
+            Self::Yum => "yum",
             Self::Pacman => "pacman",
             Self::Zypper => "zypper",
-            Self::Apk    => "apk",
-            Self::Brew   => "brew",
+            Self::Apk => "apk",
+            Self::Brew => "brew",
         }
     }
 
     fn install_hint(&self) -> &'static str {
         match self {
-            Self::Apt    => "sudo apt-get install -y tmux",
-            Self::Dnf    => "sudo dnf install -y tmux",
-            Self::Yum    => "sudo yum install -y tmux",
+            Self::Apt => "sudo apt-get install -y tmux",
+            Self::Dnf => "sudo dnf install -y tmux",
+            Self::Yum => "sudo yum install -y tmux",
             Self::Pacman => "sudo pacman -Sy --noconfirm tmux",
             Self::Zypper => "sudo zypper install -y tmux",
-            Self::Apk    => "apk add tmux",
-            Self::Brew   => "brew install tmux",
+            Self::Apk => "apk add tmux",
+            Self::Brew => "brew install tmux",
         }
     }
 }
 
 fn detect_package_manager() -> Option<PackageManager> {
-    if which("apt-get") { return Some(PackageManager::Apt); }
-    if which("dnf")     { return Some(PackageManager::Dnf); }
-    if which("yum")     { return Some(PackageManager::Yum); }
-    if which("pacman")  { return Some(PackageManager::Pacman); }
-    if which("zypper")  { return Some(PackageManager::Zypper); }
-    if which("apk")     { return Some(PackageManager::Apk); }
-    if which("brew")    { return Some(PackageManager::Brew); }
+    if which("apt-get") {
+        return Some(PackageManager::Apt);
+    }
+    if which("dnf") {
+        return Some(PackageManager::Dnf);
+    }
+    if which("yum") {
+        return Some(PackageManager::Yum);
+    }
+    if which("pacman") {
+        return Some(PackageManager::Pacman);
+    }
+    if which("zypper") {
+        return Some(PackageManager::Zypper);
+    }
+    if which("apk") {
+        return Some(PackageManager::Apk);
+    }
+    if which("brew") {
+        return Some(PackageManager::Brew);
+    }
     None
 }
 
@@ -126,19 +140,17 @@ fn run_install(pm: &PackageManager) -> bool {
     let has_sudo = which("sudo");
 
     let (bin, args): (&str, Vec<&str>) = match pm {
-        PackageManager::Apt    => ("apt-get", vec!["install", "-y", "tmux"]),
-        PackageManager::Dnf    => ("dnf",     vec!["install", "-y", "tmux"]),
-        PackageManager::Yum    => ("yum",     vec!["install", "-y", "tmux"]),
-        PackageManager::Pacman => ("pacman",  vec!["-Sy", "--noconfirm", "tmux"]),
-        PackageManager::Zypper => ("zypper",  vec!["install", "-y", "tmux"]),
-        PackageManager::Apk    => ("apk",     vec!["add", "tmux"]),
-        PackageManager::Brew   => ("brew",    vec!["install", "tmux"]),
+        PackageManager::Apt => ("apt-get", vec!["install", "-y", "tmux"]),
+        PackageManager::Dnf => ("dnf", vec!["install", "-y", "tmux"]),
+        PackageManager::Yum => ("yum", vec!["install", "-y", "tmux"]),
+        PackageManager::Pacman => ("pacman", vec!["-Sy", "--noconfirm", "tmux"]),
+        PackageManager::Zypper => ("zypper", vec!["install", "-y", "tmux"]),
+        PackageManager::Apk => ("apk", vec!["add", "tmux"]),
+        PackageManager::Brew => ("brew", vec!["install", "tmux"]),
     };
 
     // brew and apk run as the current user; others need root
-    let use_sudo = !root
-        && has_sudo
-        && !matches!(pm, PackageManager::Brew | PackageManager::Apk);
+    let use_sudo = !root && has_sudo && !matches!(pm, PackageManager::Brew | PackageManager::Apk);
 
     let status = if use_sudo {
         Command::new("sudo").arg(bin).args(&args).status()

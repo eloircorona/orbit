@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::Args;
 use orbit_core::user_config::UserConfig;
 use std::process::Command;
@@ -19,9 +19,7 @@ pub struct InitArgs {
 
 pub async fn run(args: InitArgs) -> Result<()> {
     let cfg = UserConfig::load();
-    let ai_root = args
-        .ai_root
-        .unwrap_or_else(|| cfg.ai_root_expanded());
+    let ai_root = args.ai_root.unwrap_or_else(|| cfg.ai_root_expanded());
 
     if ai_root.is_dir() && ai_root.join(".git").is_dir() {
         bail!(
@@ -43,7 +41,8 @@ pub async fn run(args: InitArgs) -> Result<()> {
     let status = Command::new("git")
         .args([
             "clone",
-            "--branch", &args.branch,
+            "--branch",
+            &args.branch,
             "--single-branch",
             &args.governance_url,
             &ai_root.to_string_lossy(),

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use directories::BaseDirs;
 use orbit_core::{context::OrbitScope, user_config::UserConfig};
 use std::path::{Path, PathBuf};
@@ -15,8 +15,8 @@ pub struct ResolveArgs {
 /// Public entry point. Resolves args against the real filesystem.
 /// Reads `ai_root` from `~/.config/orbit/config.toml` (falls back to `~/AI`).
 pub fn resolve(args: ResolveArgs) -> Result<OrbitScope> {
-    let base_dirs = BaseDirs::new()
-        .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
+    let base_dirs =
+        BaseDirs::new().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
     let ai_root = UserConfig::load().ai_root_expanded();
     resolve_inner(args, base_dirs.home_dir(), &ai_root)
 }
@@ -172,7 +172,8 @@ mod tests {
 
     fn fake_home() -> TempDir {
         let tmp = TempDir::new().unwrap();
-        let repo = tmp.path()
+        let repo = tmp
+            .path()
             .join("AI/tenants/AIDEV/projects/AI-ECOSYSTEM/repositories/orbit");
         fs::create_dir_all(&repo).unwrap();
         tmp
@@ -190,7 +191,10 @@ mod tests {
     #[test]
     fn resolves_workspace_case_insensitive() {
         let home = fake_home();
-        let args = ResolveArgs { workspace: Some("ai".to_string()), ..Default::default() };
+        let args = ResolveArgs {
+            workspace: Some("ai".to_string()),
+            ..Default::default()
+        };
         let scope = resolve_with_home(args, home.path()).unwrap();
         assert_eq!(scope.workspace_root, home.path().join("AI"));
     }
@@ -220,13 +224,19 @@ mod tests {
         assert_eq!(scope.tenant, "AIDEV");
         assert_eq!(scope.project, "AI-ECOSYSTEM");
         assert_eq!(scope.repository, "orbit");
-        assert_eq!(scope.work_dir, home.path().join("AI/AIDEV/AI-ECOSYSTEM/orbit"));
+        assert_eq!(
+            scope.work_dir,
+            home.path().join("AI/AIDEV/AI-ECOSYSTEM/orbit")
+        );
     }
 
     #[test]
     fn missing_workspace_returns_error() {
         let home = fake_home();
-        let args = ResolveArgs { workspace: Some("nonexistent".to_string()), ..Default::default() };
+        let args = ResolveArgs {
+            workspace: Some("nonexistent".to_string()),
+            ..Default::default()
+        };
         assert!(resolve_with_home(args, home.path()).is_err());
     }
 

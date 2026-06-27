@@ -1,7 +1,11 @@
 use anyhow::Result;
 use clap::{Args, ValueEnum};
 use orbit_core::engine::Engine;
-use orbit_engine::{config, launcher::{self, LaunchOptions}, resolver};
+use orbit_engine::{
+    config,
+    launcher::{self, LaunchOptions},
+    resolver,
+};
 
 /// Clap-facing engine selector. Kept separate from `orbit_core::Engine` so that
 /// `orbit-core` never has to depend on clap.
@@ -87,5 +91,12 @@ pub async fn run(args: LaunchArgs) -> Result<()> {
     }
 
     // 4. Write config file, set env vars, exec into the engine (never returns on success)
-    launcher::launch(&scope, &merged, engine, LaunchOptions { no_tmux: args.no_tmux })
+    launcher::launch(
+        &scope,
+        &merged,
+        engine,
+        LaunchOptions {
+            no_tmux: args.no_tmux,
+        },
+    )
 }

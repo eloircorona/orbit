@@ -38,14 +38,22 @@ pub enum Request {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
-    Sessions { sessions: Vec<Session> },
-    Killed { id: String },
-    Cleaned { count: usize },
+    Sessions {
+        sessions: Vec<Session>,
+    },
+    Killed {
+        id: String,
+    },
+    Cleaned {
+        count: usize,
+    },
     Status {
         uptime_secs: u64,
         session_count: usize,
         pid: u32,
     },
     Ok,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }

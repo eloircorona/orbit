@@ -3,10 +3,7 @@ use std::time::Duration;
 use tokio::{sync::broadcast, time::sleep};
 use tracing::debug;
 
-pub async fn run_cleanup_loop(
-    interval: Duration,
-    mut shutdown: broadcast::Receiver<()>,
-) {
+pub async fn run_cleanup_loop(interval: Duration, mut shutdown: broadcast::Receiver<()>) {
     loop {
         tokio::select! {
             _ = sleep(interval) => {

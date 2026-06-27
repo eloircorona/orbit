@@ -80,7 +80,11 @@ pub fn load(scope: &OrbitScope, engine: Engine) -> Result<MergedConfig> {
     }
 
     // 4. Global AI root config (always wins)
-    merge_file_into(&mut cfg, &scope.global_ai_root.join("opencode.json"), engine);
+    merge_file_into(
+        &mut cfg,
+        &scope.global_ai_root.join("opencode.json"),
+        engine,
+    );
 
     // Load MCP from mcp.json files at each layer
     load_mcp_layers(scope, &mut cfg.mcp);
@@ -173,7 +177,10 @@ fn load_mcp_layers(scope: &OrbitScope, target: &mut HashMap<String, McpServer>) 
         merge_dual_mcp(target, shared, local, &tenant_rel);
 
         if !scope.project.is_empty() {
-            let proj_rel = format!("tenants/{}/projects/{}/mcp.json", scope.tenant, scope.project);
+            let proj_rel = format!(
+                "tenants/{}/projects/{}/mcp.json",
+                scope.tenant, scope.project
+            );
             merge_dual_mcp(target, shared, local, &proj_rel);
 
             if !scope.repository.is_empty() {
@@ -260,7 +267,9 @@ fn normalize_path(path: &Path) -> PathBuf {
     for component in path.components() {
         match component {
             Component::CurDir => {}
-            Component::ParentDir => { parts.pop(); }
+            Component::ParentDir => {
+                parts.pop();
+            }
             other => parts.push(other),
         }
     }
@@ -341,7 +350,11 @@ mod tests {
     #[test]
     fn resolves_relative_instructions_to_absolute() {
         let tmp = TempDir::new().unwrap();
-        write(tmp.path(), "cfg.json", r#"{ "instructions": ["README.md"] }"#);
+        write(
+            tmp.path(),
+            "cfg.json",
+            r#"{ "instructions": ["README.md"] }"#,
+        );
         let mut cfg = MergedConfig::default();
         merge_file_into(&mut cfg, &tmp.path().join("cfg.json"), Engine::Opencode);
 

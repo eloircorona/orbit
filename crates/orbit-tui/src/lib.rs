@@ -1,7 +1,7 @@
 mod app;
 mod mcp;
-mod widget;
 mod views;
+mod widget;
 
 use orbit_core::engine::Engine;
 

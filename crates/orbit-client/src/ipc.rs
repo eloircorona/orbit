@@ -1,6 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use orbit_core::{
-    ipc::{socket_path, Request, Response},
+    ipc::{Request, Response, socket_path},
     session::Session,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

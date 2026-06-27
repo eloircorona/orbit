@@ -62,19 +62,21 @@ pub fn normalize(base_dir: &Path, raw: &serde_json::Value) -> Option<McpServer> 
         .unwrap_or_default();
 
     // ── cwd ───────────────────────────────────────────────────────────────────
-    let cwd = obj
-        .get("cwd")
-        .and_then(|v| v.as_str())
-        .map(|s| {
-            let p = Path::new(s);
-            if s.starts_with("./") || s.starts_with("../") {
-                base_dir.join(p)
-            } else {
-                p.to_path_buf()
-            }
-        });
+    let cwd = obj.get("cwd").and_then(|v| v.as_str()).map(|s| {
+        let p = Path::new(s);
+        if s.starts_with("./") || s.starts_with("../") {
+            base_dir.join(p)
+        } else {
+            p.to_path_buf()
+        }
+    });
 
-    Some(McpServer { command, environment, cwd, server_type })
+    Some(McpServer {
+        command,
+        environment,
+        cwd,
+        server_type,
+    })
 }
 
 /// Merge all servers from an `mcp.json` file into `target`.
@@ -106,7 +108,9 @@ fn normalize_path(path: &Path) -> PathBuf {
     for component in path.components() {
         match component {
             Component::CurDir => {}
-            Component::ParentDir => { parts.pop(); }
+            Component::ParentDir => {
+                parts.pop();
+            }
             other => parts.push(other),
         }
     }

@@ -1,23 +1,18 @@
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use orbit_core::{
-    engine::Engine,
-    ipc::socket_path,
-    session::Session,
-    user_config::UserConfig,
-};
-use ratatui::{backend::CrosstermBackend, widgets::TableState, Terminal};
+use orbit_core::{engine::Engine, ipc::socket_path, session::Session, user_config::UserConfig};
+use ratatui::{Terminal, backend::CrosstermBackend, widgets::TableState};
 use std::{
     io,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
-use crate::{widget::TextInput, LaunchParams};
+use crate::{LaunchParams, widget::TextInput};
 
 // ── tabs ──────────────────────────────────────────────────────────────────────
 
@@ -386,7 +381,8 @@ impl App {
             return;
         }
         let i = self.table_state.selected().unwrap_or(0);
-        self.table_state.select(Some(if i == 0 { n - 1 } else { i - 1 }));
+        self.table_state
+            .select(Some(if i == 0 { n - 1 } else { i - 1 }));
     }
 
     pub fn move_down(&mut self) {
@@ -399,7 +395,9 @@ impl App {
     }
 
     pub fn selected_session(&self) -> Option<&Session> {
-        self.table_state.selected().and_then(|i| self.sessions.get(i))
+        self.table_state
+            .selected()
+            .and_then(|i| self.sessions.get(i))
     }
 
     pub fn attach_selected(&mut self) {
@@ -408,10 +406,7 @@ impl App {
                 self.status_msg = Some("No session selected.".to_string());
             }
             Some(s) if !s.has_tmux() => {
-                self.status_msg = Some(format!(
-                    "Session {} was not launched in tmux.",
-                    s.id
-                ));
+                self.status_msg = Some(format!("Session {} was not launched in tmux.", s.id));
             }
             Some(s) if !s.is_running() => {
                 self.status_msg = Some(format!("Session {} is no longer running.", s.id));
@@ -528,8 +523,7 @@ impl App {
                         self.post_action = Some(PostAction::Attach(session));
                         self.should_quit = true;
                     } else {
-                        self.status_msg =
-                            Some("Cannot attach: not in tmux or not running.".into());
+                        self.status_msg = Some("Cannot attach: not in tmux or not running.".into());
                     }
                 }
                 KeyCode::Char('K') => {
@@ -552,19 +546,16 @@ impl App {
                         self.status_msg = Some("Name and Command are required.".into());
                         self.mode = Mode::AddMcp(state);
                     } else {
-                        let path =
-                            state.target_path(&self.sys.ai_root, &self.sys.default_tenant);
+                        let path = state.target_path(&self.sys.ai_root, &self.sys.default_tenant);
                         let args = state.args_list();
                         let env_map = state.env_map();
                         match crate::mcp::add_server(&path, &name, &cmd, &args, env_map) {
                             Ok(()) => {
-                                self.status_msg =
-                                    Some(format!("Added MCP server \"{name}\"."));
+                                self.status_msg = Some(format!("Added MCP server \"{name}\"."));
                                 self.sys.reload_mcp();
                             }
                             Err(e) => {
-                                self.status_msg =
-                                    Some(format!("Failed to add MCP server: {e}"));
+                                self.status_msg = Some(format!("Failed to add MCP server: {e}"));
                             }
                         }
                         // mode stays Normal (success or I/O error)
@@ -579,9 +570,7 @@ impl App {
                     if !consumed {
                         match code {
                             KeyCode::Up => state.focused = state.focused.prev(),
-                            KeyCode::Down | KeyCode::Enter => {
-                                state.focused = state.focused.next()
-                            }
+                            KeyCode::Down | KeyCode::Enter => state.focused = state.focused.next(),
                             KeyCode::Left | KeyCode::Right
                                 if state.focused == AddMcpField::Scope =>
                             {
@@ -720,19 +709,17 @@ async fn handle_async_action(action: AsyncAction, app: &mut App) {
             app.sys.refresh();
             app.status_msg = Some("Daemon started.".into());
         }
-        AsyncAction::DaemonStop => {
-            match orbit_client::ipc::shutdown().await {
-                Ok(()) => {
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                    app.sys.refresh();
-                    app.status_msg = Some("Daemon stopped.".into());
-                }
-                Err(e) => {
-                    app.status_msg = Some(format!("Stop failed: {e}"));
-                    app.sys.refresh();
-                }
+        AsyncAction::DaemonStop => match orbit_client::ipc::shutdown().await {
+            Ok(()) => {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                app.sys.refresh();
+                app.status_msg = Some("Daemon stopped.".into());
             }
-        }
+            Err(e) => {
+                app.status_msg = Some(format!("Stop failed: {e}"));
+                app.sys.refresh();
+            }
+        },
     }
 }
 

@@ -1,13 +1,8 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
 use orbit_core::{user_config::UserConfig, workspace_config::WorkspaceConfig};
 use sha2::{Digest, Sha256};
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::PathBuf,
-    process::Command,
-};
+use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, process::Command};
 
 #[derive(Debug, Args)]
 pub struct UpdateArgs {
@@ -45,7 +40,10 @@ pub async fn run(args: UpdateArgs) -> Result<()> {
             println!("  AI root is not a git repo — skipping governance sync.");
             println!("  (Run `orbit init <url>` to set up a governance repo)");
         } else if args.dry_run {
-            println!("  [dry-run] would run: git -C {} pull --ff-only", ai_root.display());
+            println!(
+                "  [dry-run] would run: git -C {} pull --ff-only",
+                ai_root.display()
+            );
         } else {
             println!("  Syncing governance configs...");
             let status = Command::new("git")

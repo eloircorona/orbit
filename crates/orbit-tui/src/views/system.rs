@@ -11,7 +11,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray))
-        .title(Span::styled(" System ", Style::default().fg(Color::DarkGray)));
+        .title(Span::styled(
+            " System ",
+            Style::default().fg(Color::DarkGray),
+        ));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -86,10 +89,7 @@ fn render_info(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(d_label, d_style),
             k("  [s]"),
             k("   orbit "),
-            Span::styled(
-                format!("v{version}"),
-                Style::default().fg(Color::DarkGray),
-            ),
+            Span::styled(format!("v{version}"), Style::default().fg(Color::DarkGray)),
         ]),
         Line::from(""),
         Line::from(Span::styled(

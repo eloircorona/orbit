@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use orbit_core::{user_config::UserConfig, workspace_config::WorkspaceConfig};
 use sha2::{Digest, Sha256};
@@ -87,7 +87,10 @@ fn enable(token: &str) -> Result<()> {
 
     println!("Dev mode enabled.");
     println!("  {} → {}", orbit_path.display(), orbit_dev_path.display());
-    println!("  Stable binary backed up at {}", orbit_stable_path.display());
+    println!(
+        "  Stable binary backed up at {}",
+        orbit_stable_path.display()
+    );
     println!();
     println!("  Run `orbit dev disable` to restore the stable binary.");
 
@@ -197,7 +200,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 fn create_token() -> Result<(String, String)> {
@@ -228,7 +234,10 @@ fn is_dev_symlink(orbit: &PathBuf, orbit_dev: &PathBuf) -> bool {
             let target_abs = if target.is_absolute() {
                 target
             } else {
-                orbit.parent().unwrap_or(std::path::Path::new(".")).join(target)
+                orbit
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join(target)
             };
             target_abs == *orbit_dev
         })

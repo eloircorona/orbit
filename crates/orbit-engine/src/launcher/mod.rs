@@ -3,7 +3,7 @@ pub mod render;
 pub mod runtime;
 pub mod tmux;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use orbit_core::{context::OrbitScope, engine::Engine, session::Session};
 use std::{fs, os::unix::process::CommandExt, path::Path, process::Command};
 
@@ -29,7 +29,12 @@ impl Default for LaunchOptions {
 /// 4. Register session (before env override)
 /// 5. Set environment variables
 /// 6. `exec` into tmux (wrapping the engine) or directly into the engine
-pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine, opts: LaunchOptions) -> Result<()> {
+pub fn launch(
+    scope: &OrbitScope,
+    config: &MergedConfig,
+    engine: Engine,
+    opts: LaunchOptions,
+) -> Result<()> {
     // 1. Runtime dirs
     let paths = runtime::setup(scope, engine)?;
 
@@ -42,9 +47,7 @@ pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine, opts: L
 
     // 4. Decide tmux strategy before registering the session
     let tmux_name = tmux_session_name(scope, engine);
-    let use_tmux = !opts.no_tmux
-        && !tmux::already_inside()
-        && tmux::ensure_available(); // prompts to install if missing + TTY
+    let use_tmux = !opts.no_tmux && !tmux::already_inside() && tmux::ensure_available(); // prompts to install if missing + TTY
 
     // 5. Register session — BEFORE set_env() overwrites XDG_DATA_HOME
     let session = Session::new(
@@ -55,7 +58,11 @@ pub fn launch(scope: &OrbitScope, config: &MergedConfig, engine: Engine, opts: L
         &scope.repository,
         scope.work_dir.clone(),
         scope.global_mode,
-        if use_tmux { Some(tmux_name.clone()) } else { None },
+        if use_tmux {
+            Some(tmux_name.clone())
+        } else {
+            None
+        },
     );
     if let Err(e) = session.save() {
         tracing::warn!("could not save session: {e}");
@@ -159,9 +166,18 @@ fn set_env(scope: &OrbitScope, engine: Engine, paths: &runtime::RuntimePaths) {
         std::env::set_var("XDG_STATE_HOME", &paths.xdg_state);
 
         std::env::set_var("AI_ENGINE", engine.as_str());
-        std::env::set_var("AI_WORKSPACE_ROOT", scope.workspace_root.to_string_lossy().as_ref());
-        std::env::set_var("AI_CONTEXT_ROOT", scope.ai_context_root.to_string_lossy().as_ref());
-        std::env::set_var("AI_GLOBAL_ROOT", scope.global_ai_root.to_string_lossy().as_ref());
+        std::env::set_var(
+            "AI_WORKSPACE_ROOT",
+            scope.workspace_root.to_string_lossy().as_ref(),
+        );
+        std::env::set_var(
+            "AI_CONTEXT_ROOT",
+            scope.ai_context_root.to_string_lossy().as_ref(),
+        );
+        std::env::set_var(
+            "AI_GLOBAL_ROOT",
+            scope.global_ai_root.to_string_lossy().as_ref(),
+        );
         std::env::set_var("AI_TENANT", &scope.tenant);
         std::env::set_var("AI_PROJECT", &scope.project);
         std::env::set_var("AI_REPOSITORY", &scope.repository);
@@ -236,7 +252,11 @@ mod tests {
         let cfg = config_with_mcp();
         let paths = runtime::setup(&scope, Engine::Opencode).unwrap();
         let rendered = render::render(&cfg, Engine::Opencode);
-        fs::write(&paths.config_file, serde_json::to_string_pretty(&rendered).unwrap()).unwrap();
+        fs::write(
+            &paths.config_file,
+            serde_json::to_string_pretty(&rendered).unwrap(),
+        )
+        .unwrap();
         assert!(paths.config_file.exists());
         let content = fs::read_to_string(&paths.config_file).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -250,7 +270,11 @@ mod tests {
         let cfg = config_with_mcp();
         let paths = runtime::setup(&scope, Engine::Claude).unwrap();
         let rendered = render::render(&cfg, Engine::Claude);
-        fs::write(&paths.config_file, serde_json::to_string_pretty(&rendered).unwrap()).unwrap();
+        fs::write(
+            &paths.config_file,
+            serde_json::to_string_pretty(&rendered).unwrap(),
+        )
+        .unwrap();
         let content = fs::read_to_string(&paths.config_file).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed.as_object().unwrap().len(), 1);
@@ -283,7 +307,10 @@ mod tests {
 
     #[test]
     fn tmux_session_name_global() {
-        let scope = OrbitScope { global_mode: true, ..Default::default() };
+        let scope = OrbitScope {
+            global_mode: true,
+            ..Default::default()
+        };
         assert_eq!(tmux_session_name(&scope, Engine::Claude), "orbit-claude");
     }
 }

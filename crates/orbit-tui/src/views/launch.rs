@@ -1,4 +1,4 @@
-use crate::app::{App, LaunchField, ENGINES};
+use crate::app::{App, ENGINES, LaunchField};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -11,7 +11,10 @@ pub fn render(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray))
-        .title(Span::styled(" Launch ", Style::default().fg(Color::DarkGray)));
+        .title(Span::styled(
+            " Launch ",
+            Style::default().fg(Color::DarkGray),
+        ));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -49,19 +52,24 @@ pub fn render(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
 fn render_engine_row(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let focused = app.launch.focused == LaunchField::Engine;
     let label_style = if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     };
 
-    let mut spans = vec![
-        Span::styled("  Engine:  ", label_style),
-    ];
+    let mut spans = vec![Span::styled("  Engine:  ", label_style)];
 
     for (i, engine) in ENGINES.iter().enumerate() {
         let selected = i == app.launch.engine_idx;
         let (bullet, style) = if selected {
-            ("● ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            (
+                "● ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
             ("○ ", Style::default().fg(Color::DarkGray))
         };
@@ -79,7 +87,12 @@ fn render_engine_row(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn render_text_field(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect, field: LaunchField) {
+fn render_text_field(
+    f: &mut Frame,
+    app: &mut App,
+    area: ratatui::layout::Rect,
+    field: LaunchField,
+) {
     let focused = app.launch.focused == field;
 
     let (label, display_text) = match field {
@@ -99,7 +112,9 @@ fn render_text_field(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect, 
     };
 
     let label_style = if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     };
@@ -131,8 +146,7 @@ fn render_text_field(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect, 
         ..cols[0]
     };
     f.render_widget(
-        Paragraph::new(Span::styled(format!("  {label}"), label_style))
-            .alignment(Alignment::Left),
+        Paragraph::new(Span::styled(format!("  {label}"), label_style)).alignment(Alignment::Left),
         label_area,
     );
 
@@ -158,7 +172,9 @@ fn render_text_field(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect, 
 fn render_notmux(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let focused = app.launch.focused == LaunchField::NoTmux;
     let label_style = if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     };
@@ -198,10 +214,7 @@ fn render_launch_button(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         Span::styled(prefix, style),
         Span::styled("[ Launch ]", style),
         if focused {
-            Span::styled(
-                "  ← press Enter",
-                Style::default().fg(Color::DarkGray),
-            )
+            Span::styled("  ← press Enter", Style::default().fg(Color::DarkGray))
         } else {
             Span::raw("")
         },

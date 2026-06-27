@@ -205,9 +205,11 @@ fn load_manifest(shared: &Path, local: &Path) -> serde_json::Value {
     let local_manifest = load_file(&local.join("manifest.jsonc"));
     // Local entries fill in only what shared doesn't already define
     for section in ["agents", "commands"] {
-        let shared_section = manifest
-            .as_object_mut()
-            .and_then(|o| o.entry(section).or_insert_with(|| serde_json::json!({})).as_object_mut());
+        let shared_section = manifest.as_object_mut().and_then(|o| {
+            o.entry(section)
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+        });
         if let (Some(shared_sec), Some(local_sec)) = (
             shared_section,
             local_manifest.get(section).and_then(|v| v.as_object()),
@@ -350,7 +352,9 @@ fn parse_frontmatter(text: &str) -> (Frontmatter, String) {
 
     let fm_str = &after[..end_idx];
     let body_start = end_idx + "\n---".len();
-    let body = after[body_start..].trim_start_matches('\n').trim_start_matches("\r\n");
+    let body = after[body_start..]
+        .trim_start_matches('\n')
+        .trim_start_matches("\r\n");
 
     let pairs: Frontmatter = fm_str
         .lines()
@@ -522,7 +526,8 @@ mod tests {
     #[test]
     fn merge_preserve_base_base_wins_on_conflict() {
         let base = "---\nname: plan\ndescription: base desc\n---\n\nBase body.";
-        let overlay = "---\nname: plan\ndescription: overlay desc\nextra: new key\n---\n\nOverlay body.";
+        let overlay =
+            "---\nname: plan\ndescription: overlay desc\nextra: new key\n---\n\nOverlay body.";
         let merged = merge_preserve_base(base, overlay);
         // base description must win
         assert!(merged.contains("base desc"));
@@ -561,9 +566,9 @@ mod tests {
     }
 
     #[test]
-    fn build_claude_creates_claude_md_and_agents(  ) {
-        use tempfile::TempDir;
+    fn build_claude_creates_claude_md_and_agents() {
         use orbit_core::context::OrbitScope;
+        use tempfile::TempDir;
 
         let tmp = TempDir::new().unwrap();
         // Create minimal shared opencode dir with manifest and one agent
@@ -573,11 +578,13 @@ mod tests {
         fs::write(
             shared.join("manifest.jsonc"),
             r#"{ "agents": { "plan": { "source": "agents/plan.md" } }, "commands": {} }"#,
-        ).unwrap();
+        )
+        .unwrap();
         fs::write(
             agents_dir.join("plan.md"),
             "---\ndescription: The plan agent\n---\n\nYou plan things.",
-        ).unwrap();
+        )
+        .unwrap();
 
         let runtime_dir = tmp.path().join("runtime");
         fs::create_dir_all(&runtime_dir).unwrap();

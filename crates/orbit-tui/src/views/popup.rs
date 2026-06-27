@@ -97,32 +97,34 @@ pub fn render_help(f: &mut Frame, area: Rect) {
 pub fn render_confirm_kill(f: &mut Frame, area: Rect, session: Session) {
     let popup_area = centered_rect(54, 9, area);
 
-    let alive = if session.is_running() { "alive" } else { "dead" };
+    let alive = if session.is_running() {
+        "alive"
+    } else {
+        "dead"
+    };
 
     let lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::raw("  Kill session "),
-            Span::styled(
-                session.id.clone(),
-                Style::default().fg(Color::Yellow),
-            ),
+            Span::styled(session.id.clone(), Style::default().fg(Color::Yellow)),
             Span::raw("?"),
         ]),
-        Line::from(vec![
-            Span::styled(
-                format!("  {} │ {}  ({})", session.engine, session.scope_label(), alive),
-                Style::default().fg(Color::DarkGray),
+        Line::from(vec![Span::styled(
+            format!(
+                "  {} │ {}  ({})",
+                session.engine,
+                session.scope_label(),
+                alive
             ),
-        ]),
+            Style::default().fg(Color::DarkGray),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::raw("       "),
             Span::styled(
                 "[y] Confirm",
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
             Span::raw("       "),
             Span::styled("[Esc/n] Cancel", Style::default().fg(Color::DarkGray)),
@@ -145,12 +147,7 @@ pub fn render_details(f: &mut Frame, area: Rect, session: Session) {
         Span::styled("○ dead", Style::default().fg(Color::DarkGray))
     };
 
-    let k = |s: &str| {
-        Span::styled(
-            format!("{:<12}", s),
-            Style::default().fg(Color::DarkGray),
-        )
-    };
+    let k = |s: &str| Span::styled(format!("{:<12}", s), Style::default().fg(Color::DarkGray));
 
     let work_dir = session.work_dir.display().to_string();
     let tmux = session
@@ -183,16 +180,8 @@ pub fn render_details(f: &mut Frame, area: Rect, session: Session) {
             k("Scope:"),
             Span::raw(session.scope_label()),
         ]),
-        Line::from(vec![
-            Span::raw("  "),
-            k("Dir:"),
-            Span::raw(work_dir),
-        ]),
-        Line::from(vec![
-            Span::raw("  "),
-            k("Tmux:"),
-            Span::raw(tmux),
-        ]),
+        Line::from(vec![Span::raw("  "), k("Dir:"), Span::raw(work_dir)]),
+        Line::from(vec![Span::raw("  "), k("Tmux:"), Span::raw(tmux)]),
         Line::from(vec![
             Span::raw("  "),
             k("Started:"),
@@ -309,7 +298,10 @@ fn mcp_scope_line(focused: bool, scope_global: bool, tenant: &str) -> Line<'stat
     Line::from(vec![
         Span::styled("  Scope:   ".to_string(), label_style),
         Span::styled("● global".to_string(), g_style),
-        Span::styled("   ○ tenant (".to_string(), Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            "   ○ tenant (".to_string(),
+            Style::default().fg(Color::DarkGray),
+        ),
         Span::styled(tenant.to_string(), t_style),
         Span::styled(")  [←→]".to_string(), Style::default().fg(Color::DarkGray)),
     ])
@@ -386,9 +378,7 @@ pub fn render_confirm_remove_mcp(f: &mut Frame, area: Rect, entry: &McpEntry) {
             Span::raw("        "),
             Span::styled(
                 "[y] Remove".to_string(),
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
             Span::raw("        "),
             Span::styled(

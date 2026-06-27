@@ -187,8 +187,16 @@ mod tests {
     use tempfile::TempDir;
 
     fn make_session(pid: u32) -> Session {
-        Session::new(pid, "opencode", "AIDEV", "AI-ECOSYSTEM", "orbit",
-            PathBuf::from("/work"), false, None)
+        Session::new(
+            pid,
+            "opencode",
+            "AIDEV",
+            "AI-ECOSYSTEM",
+            "orbit",
+            PathBuf::from("/work"),
+            false,
+            None,
+        )
     }
 
     #[test]
@@ -212,8 +220,16 @@ mod tests {
 
     #[test]
     fn scope_label_partial() {
-        let s = Session::new(1, "claude", "AIDEV", "AI-ECOSYSTEM", "",
-            PathBuf::from("/work"), false, None);
+        let s = Session::new(
+            1,
+            "claude",
+            "AIDEV",
+            "AI-ECOSYSTEM",
+            "",
+            PathBuf::from("/work"),
+            false,
+            None,
+        );
         assert_eq!(s.scope_label(), "AIDEV / AI-ECOSYSTEM");
     }
 
